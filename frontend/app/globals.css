@@ -5,14 +5,14 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.97 0 0);
-  --border: oklch(0.922 0 0);
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --muted: #e8e8e6;
+  --muted-foreground: #6b6b68;
+  --accent: #ff6b4a;
+  --accent-foreground: #fafaf8;
+  --secondary: #f5a623;
+  --border: #e8e8e6;
+  --background: #fafaf8;
+  --foreground: #1a1a18;
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
