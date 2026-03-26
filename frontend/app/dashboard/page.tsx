@@ -2,7 +2,31 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Compass, LayoutDashboard, MapPinned, Settings } from "lucide-react";
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
+
+const navItems = [
+  { label: "Overview", icon: LayoutDashboard, active: true },
+  { label: "Trips", icon: MapPinned, active: false },
+  { label: "Explore", icon: Compass, active: false },
+  { label: "Settings", icon: Settings, active: false },
+];
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -36,20 +60,45 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-4 p-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <button
-          type="button"
-          onClick={handleSignOut}
-          disabled={isSigningOut}
-          className="inline-flex items-center justify-center rounded-md border border-border px-4 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
-        >
-          {isSigningOut ? "Signing out..." : "Sign out"}
-        </button>
-      </div>
-
-      {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
-    </main>
+    <SidebarProvider>
+      <Sidebar collapsible="icon">
+        <SidebarHeader className="px-4 py-4">
+          <p className="text-lg font-semibold">Travelynx</p>
+          <p className="text-xs text-muted-foreground">Group Travel Planner</p>
+        </SidebarHeader>
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {navItems.map((item) => (
+                  <SidebarMenuItem key={item.label}>
+                    <SidebarMenuButton isActive={item.active}>
+                      <item.icon />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
+        <SidebarFooter className="p-2">
+          <Button type="button" variant="outline" onClick={handleSignOut} disabled={isSigningOut}>
+            {isSigningOut ? "Signing out..." : "Sign out"}
+          </Button>
+        </SidebarFooter>
+      </Sidebar>
+      <SidebarInset>
+        <main className="flex min-h-svh flex-1 flex-col p-6">
+          <div className="mb-4 flex items-center gap-2">
+            <SidebarTrigger />
+            <h1 className="text-2xl font-semibold">Dashboard</h1>
+          </div>
+          <p className="text-muted-foreground">Welcome to your Triplynx workspace.</p>
+          {errorMessage ? <p className="mt-4 text-sm text-red-600">{errorMessage}</p> : null}
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
