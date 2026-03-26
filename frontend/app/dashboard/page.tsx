@@ -62,9 +62,11 @@ export default function DashboardPage() {
   return (
     <SidebarProvider>
       <Sidebar collapsible="icon">
-        <SidebarHeader className="px-4 py-4">
-          <p className="text-lg font-semibold">Travelynx</p>
-          <p className="text-xs text-muted-foreground">Group Travel Planner</p>
+        <SidebarHeader className="px-4 py-4 group-data-[collapsible=icon]:px-2">
+          <div className="flex h-8 items-center group-data-[collapsible=icon]:justify-center">
+            <p className="text-lg font-semibold group-data-[collapsible=icon]:hidden">Travelynx</p>
+            <p className="hidden text-lg font-semibold group-data-[collapsible=icon]:block">T</p>
+          </div>
         </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
