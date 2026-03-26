@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Compass, LayoutDashboard, MapPinned, Settings } from "lucide-react";
+import { Compass, LayoutDashboard, LogOut, MapPinned, Settings } from "lucide-react";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +32,37 @@ export default function DashboardPage() {
   const router = useRouter();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [userName, setUserName] = useState("User");
+  const [userEmail, setUserEmail] = useState("user@example.com");
+  const [avatarUrl, setAvatarUrl] = useState("");
+
+  useEffect(() => {
+    async function loadUser() {
+      const supabase = getSupabaseClient();
+
+      if (!supabase) {
+        return;
+      }
+
+      const { data, error } = await supabase.auth.getUser();
+
+      if (error || !data.user) {
+        return;
+      }
+
+      const metadata = data.user.user_metadata ?? {};
+      const resolvedName =
+        metadata.full_name ?? metadata.name ?? data.user.email?.split("@")[0] ?? "User";
+      const resolvedEmail = data.user.email ?? "user@example.com";
+      const resolvedAvatar = metadata.avatar_url ?? metadata.picture ?? "";
+
+      setUserName(resolvedName);
+      setUserEmail(resolvedEmail);
+      setAvatarUrl(resolvedAvatar);
+    }
+
+    loadUser();
+  }, []);
 
   async function handleSignOut() {
     setErrorMessage("");
@@ -86,8 +117,30 @@ export default function DashboardPage() {
           </SidebarGroup>
         </SidebarContent>
         <SidebarFooter className="p-2">
-          <Button type="button" variant="outline" onClick={handleSignOut} disabled={isSigningOut}>
-            {isSigningOut ? "Signing out..." : "Sign out"}
+          <div className="flex items-center gap-2 rounded-md border border-border p-2 group-data-[collapsible=icon]:justify-center">
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={userName} className="size-8 rounded-full object-cover" />
+            ) : (
+              <div className="flex size-8 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+                {userName.charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0 group-data-[collapsible=icon]:hidden">
+              <p className="truncate text-sm font-medium">{userName}</p>
+              <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleSignOut}
+            disabled={isSigningOut}
+            className="hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+          >
+            <LogOut />
+            <span className="group-data-[collapsible=icon]:hidden">
+              {isSigningOut ? "Signing out..." : "Sign out"}
+            </span>
           </Button>
         </SidebarFooter>
       </Sidebar>
