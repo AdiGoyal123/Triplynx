@@ -9,9 +9,9 @@ import { ProblemSection } from "@/components/landing/ProblemSection";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-background px-3 text-foreground sm:px-4 md:px-6">
       <LandingHeader />
-      <main>
+      <main className="space-y-4 py-4 sm:space-y-6 sm:py-6 md:space-y-8 md:py-8">
         <HeroSection />
         <ProblemSection />
         <FeaturesSection />
