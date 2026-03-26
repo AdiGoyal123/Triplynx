@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { navLinks } from "./content";
 
 export function LandingHeader() {
@@ -11,12 +12,18 @@ export function LandingHeader() {
             </div>
             <span className="text-lg font-semibold">TravelConsensus</span>
           </div>
-          <nav className="flex flex-wrap items-center gap-5 text-sm">
+          <nav className="flex flex-wrap items-center gap-4 text-sm">
             {navLinks.map((item) => (
               <a key={item.href} href={item.href} className="transition-colors hover:text-accent">
                 {item.label}
               </a>
             ))}
+            <Link
+              href="/signup"
+              className="rounded-md bg-accent px-4 py-2 text-xs font-semibold uppercase tracking-widest text-accent-foreground transition hover:opacity-90"
+            >
+              Signup
+            </Link>
           </nav>
         </div>
       </div>
