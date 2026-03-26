@@ -1,8 +1,8 @@
-import { AppShell } from "@/components/dashboard/AppShell";
+import { PageIntro } from "@/components/dashboard/PageIntro";
 
 export default function ConsensusPage() {
   return (
-    <AppShell
+    <PageIntro
       title="Consensus / Voting"
       description="Track votes and measure consensus across the group."
     />

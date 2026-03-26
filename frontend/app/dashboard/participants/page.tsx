@@ -1,8 +1,8 @@
-import { AppShell } from "@/components/dashboard/AppShell";
+import { PageIntro } from "@/components/dashboard/PageIntro";
 
 export default function ParticipantsPage() {
   return (
-    <AppShell
+    <PageIntro
       title="Participants"
       description="View and manage participants in your trip planning workspace."
     />

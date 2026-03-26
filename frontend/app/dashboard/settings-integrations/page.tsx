@@ -1,8 +1,8 @@
-import { AppShell } from "@/components/dashboard/AppShell";
+import { PageIntro } from "@/components/dashboard/PageIntro";
 
 export default function SettingsIntegrationsPage() {
   return (
-    <AppShell
+    <PageIntro
       title="Settings & Integrations"
       description="Configure workspace settings and connect external tools."
     />

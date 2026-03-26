@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import type { ReactNode } from "react";
 import {
   LayoutDashboard,
   Plane,
@@ -34,21 +35,25 @@ import {
 
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Trips", href: "/trips", icon: Plane },
-  { label: "Participants", href: "/participants", icon: Users },
-  { label: "Surveys (SMS)", href: "/surveys", icon: MessageSquareText },
-  { label: "Consensus / Voting", href: "/consensus", icon: Vote },
-  { label: "Itineraries", href: "/itineraries", icon: ListChecks },
-  { label: "Live Trip Board", href: "/live-trip-board", icon: Rows3 },
-  { label: "Settings & Integrations", href: "/settings-integrations", icon: Settings2 },
+  { label: "Trips", href: "/dashboard/trips", icon: Plane },
+  { label: "Participants", href: "/dashboard/participants", icon: Users },
+  { label: "Surveys (SMS)", href: "/dashboard/surveys", icon: MessageSquareText },
+  { label: "Consensus / Voting", href: "/dashboard/consensus", icon: Vote },
+  { label: "Itineraries", href: "/dashboard/itineraries", icon: ListChecks },
+  { label: "Live Trip Board", href: "/dashboard/live-trip-board", icon: Rows3 },
+  { label: "Settings & Integrations", href: "/dashboard/settings-integrations", icon: Settings2 },
+  // TODO: Future sidebar items (add routes before enabling)
+  // { label: "Pricing & Availability", href: "/dashboard/pricing-availability", icon: Settings2 },
+  // { label: "Monitoring", href: "/dashboard/monitoring", icon: Settings2 },
+  // { label: "Rate Limits & Abuse", href: "/dashboard/rate-limits-abuse", icon: Settings2 },
+  // { label: "Prompt Versions", href: "/dashboard/prompt-versions", icon: Settings2 },
 ];
 
 type AppShellProps = {
-  title: string;
-  description: string;
+  children: ReactNode;
 };
 
-export function AppShell({ title, description }: AppShellProps) {
+export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -161,11 +166,10 @@ export function AppShell({ title, description }: AppShellProps) {
 
       <SidebarInset>
         <main className="flex min-h-svh flex-1 flex-col p-6">
-          <div className="mb-4 flex items-center gap-2">
+          <div className="mb-4">
             <SidebarTrigger />
-            <h1 className="text-2xl font-semibold">{title}</h1>
           </div>
-          <p className="text-muted-foreground">{description}</p>
+          {children}
           {errorMessage ? <p className="mt-4 text-sm text-red-600">{errorMessage}</p> : null}
         </main>
       </SidebarInset>
