@@ -14,7 +14,7 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "TravelConsensus - AI Group Travel Planning",
+  title: "Travelynx - AI Group Travel Planning",
   description: "Plan group trips with AI and consensus voting.",
 };
 

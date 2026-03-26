@@ -10,7 +10,7 @@ export function LandingHeader() {
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent">
               <span className="text-xs font-bold text-accent-foreground">TC</span>
             </div>
-            <span className="text-lg font-semibold">TravelConsensus</span>
+            <span className="text-lg font-semibold">Travelynx</span>
           </div>
           <nav className="flex flex-wrap items-center gap-4 text-sm">
             {navLinks.map((item) => (

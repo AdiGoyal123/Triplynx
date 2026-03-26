@@ -22,7 +22,7 @@ export function ProblemSection() {
             </article>
           ))}
         </div>
-        <p className="text-center text-xl font-semibold">We built TravelConsensus to solve this.</p>
+        <p className="text-center text-xl font-semibold">We built Travelynx to solve this.</p>
       </div>
     </section>
   );

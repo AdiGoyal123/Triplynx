@@ -5,7 +5,7 @@ export default function SignupPage() {
     <main className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-10">
       <AuthCard
         title="Signup"
-        subtitle="Create your TravelConsensus account"
+        subtitle="Create your Travelynx account"
         submitLabel="Create Account"
         footerLabel="Already have an account?"
         footerActionLabel="Login"

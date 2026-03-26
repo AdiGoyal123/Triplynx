@@ -7,7 +7,7 @@ export function HeroSection() {
             Plan Group Trips That <span className="text-accent">Everyone Loves</span>
           </h1>
           <p className="mb-8 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-            Stop endless group chats and conflicting preferences. TravelConsensus uses intelligent
+            Stop endless group chats and conflicting preferences. Travelynx uses intelligent
             AI and fair voting to create personalized itineraries that make everyone happy.
           </p>
           <div className="flex flex-col gap-3 sm:flex-row">

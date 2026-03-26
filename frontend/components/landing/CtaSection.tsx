@@ -8,7 +8,7 @@ export function CtaSection() {
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="mb-5 text-3xl md:text-4xl">Ready to Plan Your Best Group Trip Yet?</h2>
           <p className="mb-8 text-base text-muted-foreground sm:text-lg">
-            Join groups already using TravelConsensus to plan trips that everyone loves.
+            Join groups already using Travelynx to plan trips that everyone loves.
           </p>
           <div className="flex flex-col justify-center gap-3 sm:flex-row">
             <a

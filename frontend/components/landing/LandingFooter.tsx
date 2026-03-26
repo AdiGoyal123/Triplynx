@@ -23,7 +23,7 @@ export function LandingFooter() {
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent">
                 <span className="text-xs font-bold text-accent-foreground">TC</span>
               </div>
-              <span className="font-semibold">TravelConsensus</span>
+              <span className="font-semibold">Travelynx</span>
             </div>
             <p className="text-sm text-muted-foreground">
               AI-powered group travel planning for everyone.
@@ -47,7 +47,7 @@ export function LandingFooter() {
         </div>
 
         <div className="flex flex-col gap-4 border-t border-border pt-6 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <p>© 2026 TravelConsensus. All rights reserved.</p>
+          <p>© 2026 Travelynx. All rights reserved.</p>
           <div className="flex gap-4">
             <a href="#" className="transition-colors hover:text-accent">
               Twitter

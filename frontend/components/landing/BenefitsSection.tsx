@@ -5,7 +5,7 @@ export function BenefitsSection() {
     <section className="py-16 sm:py-20 md:py-28">
       <div className="container">
         <h2 className="mb-12 text-center text-3xl md:mb-16 md:text-4xl">
-          Why Groups Choose TravelConsensus
+          Why Groups Choose Travelynx
         </h2>
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4 lg:gap-8">
           {benefits.map((item) => (
