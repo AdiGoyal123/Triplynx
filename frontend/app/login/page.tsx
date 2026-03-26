@@ -1,3 +1,16 @@
+import { AuthCard } from "@/components/auth/AuthCard";
+
 export default function LoginPage() {
-  return <div className="p-6 text-xl">Login</div>;
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-10">
+      <AuthCard
+        title="Login"
+        subtitle="Welcome back to TravelConsensus"
+        submitLabel="Login"
+        footerLabel="Don't have an account?"
+        footerActionLabel="Signup"
+        footerHref="/signup"
+      />
+    </main>
+  );
 }
