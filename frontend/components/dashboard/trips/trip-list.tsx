@@ -1,0 +1,35 @@
+"use client";
+
+import type { TripRow } from "./types";
+import { TripListItem } from "./trip-list-item";
+
+type TripListProps = {
+  trips: TripRow[];
+  loading: boolean;
+  error: string | null;
+};
+
+export function TripList({ trips, loading, error }: TripListProps) {
+  return (
+    <section className="rounded-2xl border border-border/70 bg-background p-4 sm:p-6">
+      <h2 className="text-lg font-semibold text-foreground">Your trips</h2>
+      <p className="mt-1 text-sm text-muted-foreground">Trips you created, newest first.</p>
+
+      {loading ? (
+        <p className="mt-6 text-sm text-muted-foreground">Loading your trips…</p>
+      ) : error ? (
+        <p className="mt-6 text-sm text-red-500">{error}</p>
+      ) : trips.length === 0 ? (
+        <p className="mt-6 text-sm text-muted-foreground">
+          You don&apos;t have any trips yet. Tap the + button to create your first trip.
+        </p>
+      ) : (
+        <ul className="mt-6 divide-y divide-border/60">
+          {trips.map((trip) => (
+            <TripListItem key={trip.id} trip={trip} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
