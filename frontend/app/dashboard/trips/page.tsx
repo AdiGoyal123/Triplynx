@@ -16,7 +16,7 @@ export default function TripsPage() {
   }, []);
 
   return (
-    <div className="relative space-y-6 pb-24">
+    <div className="relative space-y-6 pb-28">
       <PageIntro
         title="Trips"
         description="Your trips, newest first. Use the + button to add one."

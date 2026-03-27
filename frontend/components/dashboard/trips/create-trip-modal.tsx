@@ -117,7 +117,7 @@ export function CreateTripModal({ open, onClose, onCreated }: CreateTripModalPro
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
+    <div className="fixed inset-0 z-[110] flex items-end justify-center p-4 sm:items-center">
       <button
         type="button"
         className="absolute inset-0 bg-background/80 backdrop-blur-sm"
