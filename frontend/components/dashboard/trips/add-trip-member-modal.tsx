@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { TripMemberPhoneFields } from "@/components/dashboard/trips/trip-member-phone-fields";
 
 type AddTripMemberModalProps = {
   tripId: string;
@@ -164,7 +165,7 @@ export function AddTripMemberModal({ tripId, open, onClose, onAdded }: AddTripMe
           </button>
         </div>
 
-        <form className="grid max-h-full gap-4 overflow-y-auto p-5 sm:grid-cols-2" onSubmit={onSubmit}>
+        <form className="grid gap-4 overflow-visible p-5 sm:grid-cols-2" onSubmit={onSubmit}>
           <label className="grid gap-1 sm:col-span-2">
             <span className="text-sm font-medium">Display name</span>
             <input
@@ -190,18 +191,9 @@ export function AddTripMemberModal({ tripId, open, onClose, onAdded }: AddTripMe
             />
           </label>
 
-          <label className="grid gap-1">
-            <span className="text-sm font-medium">Phone</span>
-            <input
-              type="tel"
-              className={inputClass}
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+1 555 0100"
-              autoComplete="tel"
-              disabled={isSaving}
-            />
-          </label>
+          <div className="min-w-0">
+            <TripMemberPhoneFields value={phone} onChange={setPhone} disabled={isSaving} />
+          </div>
 
           {submitError ? <p className="text-sm text-red-500 sm:col-span-2">{submitError}</p> : null}
 
