@@ -18,6 +18,75 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
 
+/** Strip to E.164 digits with leading + (8–15 digits after country code). */
+function normalizeToE164(raw: string): string | null {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  const noSpaces = trimmed.replace(/\s/g, "")
+  const digitsOnly = noSpaces.startsWith("+")
+    ? "+" + noSpaces.slice(1).replace(/\D/g, "")
+    : "+" + noSpaces.replace(/\D/g, "")
+  const afterPlus = digitsOnly.slice(1)
+  if (afterPlus.length < 8 || afterPlus.length > 15) return null
+  return digitsOnly
+}
+
+function whatsappAddress(e164: string): string {
+  return e164.startsWith("whatsapp:") ? e164 : `whatsapp:${e164}`
+}
+
+function labelForAddedBy(user: {
+  email?: string | null
+  user_metadata?: Record<string, unknown> | null
+}): string {
+  const meta = user.user_metadata ?? {}
+  for (const key of ["full_name", "name", "display_name"] as const) {
+    const v = meta[key]
+    if (typeof v === "string" && v.trim()) return v.trim()
+  }
+  if (user.email?.trim()) return user.email.trim()
+  return "Someone"
+}
+
+async function sendWhatsappTripInvite(opts: {
+  accountSid: string
+  authToken: string
+  fromRaw: string
+  toE164: string
+  tripTitle: string | null
+  addedByLabel: string
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const from = whatsappAddress(
+    opts.fromRaw.startsWith("whatsapp:") ? opts.fromRaw : normalizeToE164(opts.fromRaw) ?? opts.fromRaw,
+  )
+  const to = whatsappAddress(opts.toE164)
+
+  const titlePart = opts.tripTitle?.trim() ? `"${opts.tripTitle.trim()}"` : "a trip"
+  const by = opts.addedByLabel.trim() || "Someone"
+  const body = `You've been added to ${titlePart} on Triplynx by ${by}.`
+
+  const url =
+    `https://api.twilio.com/2010-04-01/Accounts/${opts.accountSid}/Messages.json`
+  const credentials = btoa(`${opts.accountSid}:${opts.authToken}`)
+
+  const params = new URLSearchParams({ To: to, From: from, Body: body })
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: params.toString(),
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    return { ok: false, error: text || `${res.status} ${res.statusText}` }
+  }
+  return { ok: true }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
@@ -90,7 +159,7 @@ Deno.serve(async (req) => {
 
     const { data: trip, error: tripError } = await supabaseAdmin
       .from("trips")
-      .select("id, created_by")
+      .select("id, created_by, title")
       .eq("id", tripId)
       .maybeSingle()
 
@@ -130,10 +199,50 @@ Deno.serve(async (req) => {
       throw new Error(insertError.message)
     }
 
-    return new Response(JSON.stringify({ member: data }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 201,
-    })
+    let whatsapp_notification: { sent: boolean; error?: string } | undefined
+
+    if (phone) {
+      const accountSid = Deno.env.get("TWILIO_ACCOUNT_SID")?.trim()
+      const authToken = Deno.env.get("TWILIO_AUTH_TOKEN")?.trim()
+      const fromRaw = Deno.env.get("TWILIO_WHATSAPP_FROM")?.trim()
+
+      const toE164 = normalizeToE164(phone)
+      if (!accountSid || !authToken || !fromRaw) {
+        whatsapp_notification = {
+          sent: false,
+          error: "Missing TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, or TWILIO_WHATSAPP_FROM.",
+        }
+      } else if (!toE164) {
+        whatsapp_notification = {
+          sent: false,
+          error: "Phone number could not be normalized to E.164 for WhatsApp.",
+        }
+      } else {
+        const tripTitle = trip?.title ?? null
+        const result = await sendWhatsappTripInvite({
+          accountSid,
+          authToken,
+          fromRaw,
+          toE164,
+          tripTitle,
+          addedByLabel: labelForAddedBy(user),
+        })
+        whatsapp_notification = result.ok
+          ? { sent: true }
+          : { sent: false, error: result.error }
+      }
+    }
+
+    return new Response(
+      JSON.stringify({
+        member: data,
+        ...(whatsapp_notification !== undefined && { whatsapp_notification }),
+      }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 201,
+      },
+    )
   } catch (error) {
     return new Response(JSON.stringify({ error: (error as Error).message }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
