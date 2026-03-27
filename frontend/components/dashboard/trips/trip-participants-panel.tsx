@@ -21,6 +21,10 @@ export function TripParticipantsPanel({ tripId }: TripParticipantsPanelProps) {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [whatsappIssue, setWhatsappIssue] = useState<{
+    summary: string;
+    detail?: string;
+  } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const loadMembers = useCallback(async () => {
@@ -52,6 +56,7 @@ export function TripParticipantsPanel({ tripId }: TripParticipantsPanelProps) {
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitError(null);
+    setWhatsappIssue(null);
 
     if (!tripId.trim()) {
       return;
@@ -98,6 +103,20 @@ export function TripParticipantsPanel({ tripId }: TripParticipantsPanelProps) {
       setMembers((prev) => [member as TripMember, ...prev]);
     } else {
       await loadMembers();
+    }
+
+    const wa =
+      data && typeof data === "object" && "whatsapp_notification" in data
+        ? (data as { whatsapp_notification?: { sent?: boolean; error?: string } })
+            .whatsapp_notification
+        : undefined;
+    if (ph && wa && wa.sent === false) {
+      const detail = wa.error?.trim();
+      setWhatsappIssue({
+        summary:
+          "WhatsApp invite could not be sent. Check the phone number and that the recipient can receive messages (e.g. Twilio sandbox).",
+        ...(detail ? { detail } : {}),
+      });
     }
 
     setDisplayName("");
@@ -163,6 +182,21 @@ export function TripParticipantsPanel({ tripId }: TripParticipantsPanelProps) {
 
         {submitError ? (
           <p className="text-sm text-red-500 sm:col-span-2">{submitError}</p>
+        ) : null}
+
+        {whatsappIssue ? (
+          <div
+            role="status"
+            className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100 sm:col-span-2"
+          >
+            <p className="font-medium">Member added</p>
+            <p className="mt-1 text-amber-900/90 dark:text-amber-50/90">{whatsappIssue.summary}</p>
+            {whatsappIssue.detail ? (
+              <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-xs text-amber-900/80 dark:text-amber-50/80">
+                {whatsappIssue.detail}
+              </pre>
+            ) : null}
+          </div>
         ) : null}
 
         <div className="sm:col-span-2">
