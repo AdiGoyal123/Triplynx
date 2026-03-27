@@ -6,18 +6,16 @@ import { getSupabaseClient } from "@/lib/supabase/client";
 
 type TripForm = {
   title: string;
-  destination: string;
   startDate: string;
   endDate: string;
-  notes: string;
+  description: string;
 };
 
 const initialForm: TripForm = {
   title: "",
-  destination: "",
   startDate: "",
   endDate: "",
-  notes: "",
+  description: "",
 };
 
 export default function TripsPage() {
@@ -68,16 +66,11 @@ export default function TripsPage() {
       return;
     }
 
-    const descriptionSections = [
-      form.destination.trim() ? `Destination: ${form.destination.trim()}` : null,
-      form.notes.trim() ? `Notes: ${form.notes.trim()}` : null,
-    ].filter(Boolean);
-
     setIsSaving(true);
     const { data, error: createTripError } = await supabase.functions.invoke("create-trip", {
       body: {
         title: form.title.trim(),
-        description: descriptionSections.length ? descriptionSections.join("\n") : null,
+        description: form.description.trim() || null,
         start_date: form.startDate || null,
         end_date: form.endDate || null,
         status: "planning",
@@ -122,16 +115,6 @@ export default function TripsPage() {
             />
           </label>
 
-          <label className="grid gap-1 sm:col-span-2">
-            <span className="text-sm font-medium">Destination</span>
-            <input
-              className="h-10 rounded-lg border border-border/80 bg-background px-3 text-sm outline-none ring-offset-background transition placeholder:text-muted-foreground focus:ring-2 focus:ring-primary"
-              value={form.destination}
-              onChange={(e) => setForm((prev) => ({ ...prev, destination: e.target.value }))}
-              placeholder="Italy"
-            />
-          </label>
-
           <label className="grid gap-1">
             <span className="text-sm font-medium">Start date</span>
             <input
@@ -153,11 +136,11 @@ export default function TripsPage() {
           </label>
 
           <label className="grid gap-1 sm:col-span-2">
-            <span className="text-sm font-medium">Notes (optional)</span>
+            <span className="text-sm font-medium">Description (optional)</span>
             <textarea
               className="min-h-28 rounded-lg border border-border/80 bg-background px-3 py-2 text-sm outline-none ring-offset-background transition placeholder:text-muted-foreground focus:ring-2 focus:ring-primary"
-              value={form.notes}
-              onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
+              value={form.description}
+              onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
               placeholder="Any travel preferences or context..."
             />
           </label>
