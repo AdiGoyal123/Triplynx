@@ -21,3 +21,15 @@ export const initialTripForm: TripForm = {
   endDate: "",
   description: "",
 };
+
+/** Matches `public.trip_members` columns (client-side / pre-insert). */
+export type TripMember = {
+  id: string;
+  trip_id: string;
+  added_by: string | null;
+  display_name: string | null;
+  email: string | null;
+  phone: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
