@@ -408,3 +408,9 @@ entrypoint = "./functions/create-trip/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/create-trip/*.html" ]
+
+[functions.add-trip-member]
+enabled = true
+verify_jwt = true
+import_map = "./functions/add-trip-member/deno.json"
+entrypoint = "./functions/add-trip-member/index.ts"
