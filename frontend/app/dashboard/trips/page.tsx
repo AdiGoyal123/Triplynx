@@ -10,7 +10,7 @@ type TripForm = {
   startDate: string;
   endDate: string;
   budget: string;
-  status: "draft" | "ongoing" | "finished";
+  status: "planning" | "planned";
   notes: string;
 };
 
@@ -20,7 +20,7 @@ const initialForm: TripForm = {
   startDate: "",
   endDate: "",
   budget: "",
-  status: "draft",
+  status: "planning",
   notes: "",
 };
 
@@ -179,9 +179,8 @@ export default function TripsPage() {
                 }))
               }
             >
-              <option value="draft">Draft</option>
-              <option value="ongoing">Ongoing</option>
-              <option value="finished">Finished</option>
+              <option value="planning">Planning</option>
+              <option value="planned">Planned</option>
             </select>
           </label>
 

@@ -27,15 +27,20 @@ Deno.serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
+    // Prefer a custom Edge Function secret (dashboard forbids names starting with SUPABASE_).
+    // Falls back to the platform-injected key on hosted Supabase.
+    const serviceRoleKey =
+      Deno.env.get("SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
 
     if (!supabaseUrl || !serviceRoleKey) {
-      throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.")
+      throw new Error(
+        "Missing SUPABASE_URL or service role key (SERVICE_ROLE_KEY or SUPABASE_SERVICE_ROLE_KEY).",
+      )
     }
 
     const payload = (await req.json()) as CreateTripRequest
     const title = payload.title?.trim()
-    const status = payload.status?.trim() ?? "draft"
+    const status = payload.status?.trim() ?? "planning"
     const description = payload.description?.trim() || null
     const startDate = payload.start_date?.trim() || null
     const endDate = payload.end_date?.trim() || null
