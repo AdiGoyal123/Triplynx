@@ -9,8 +9,6 @@ type TripForm = {
   destination: string;
   startDate: string;
   endDate: string;
-  budget: string;
-  status: "planning" | "planned";
   notes: string;
 };
 
@@ -19,8 +17,6 @@ const initialForm: TripForm = {
   destination: "",
   startDate: "",
   endDate: "",
-  budget: "",
-  status: "planning",
   notes: "",
 };
 
@@ -74,7 +70,6 @@ export default function TripsPage() {
 
     const descriptionSections = [
       form.destination.trim() ? `Destination: ${form.destination.trim()}` : null,
-      form.budget.trim() ? `Budget: ${form.budget.trim()}` : null,
       form.notes.trim() ? `Notes: ${form.notes.trim()}` : null,
     ].filter(Boolean);
 
@@ -85,7 +80,7 @@ export default function TripsPage() {
         description: descriptionSections.length ? descriptionSections.join("\n") : null,
         start_date: form.startDate || null,
         end_date: form.endDate || null,
-        status: form.status,
+        status: "planning",
         created_by: userData.user.id,
       },
     });
@@ -127,23 +122,13 @@ export default function TripsPage() {
             />
           </label>
 
-          <label className="grid gap-1">
+          <label className="grid gap-1 sm:col-span-2">
             <span className="text-sm font-medium">Destination</span>
             <input
               className="h-10 rounded-lg border border-border/80 bg-background px-3 text-sm outline-none ring-offset-background transition placeholder:text-muted-foreground focus:ring-2 focus:ring-primary"
               value={form.destination}
               onChange={(e) => setForm((prev) => ({ ...prev, destination: e.target.value }))}
               placeholder="Italy"
-            />
-          </label>
-
-          <label className="grid gap-1">
-            <span className="text-sm font-medium">Budget (optional)</span>
-            <input
-              className="h-10 rounded-lg border border-border/80 bg-background px-3 text-sm outline-none ring-offset-background transition placeholder:text-muted-foreground focus:ring-2 focus:ring-primary"
-              value={form.budget}
-              onChange={(e) => setForm((prev) => ({ ...prev, budget: e.target.value }))}
-              placeholder="$2,000 per person"
             />
           </label>
 
@@ -165,23 +150,6 @@ export default function TripsPage() {
               value={form.endDate}
               onChange={(e) => setForm((prev) => ({ ...prev, endDate: e.target.value }))}
             />
-          </label>
-
-          <label className="grid gap-1 sm:col-span-2">
-            <span className="text-sm font-medium">Status</span>
-            <select
-              className="h-10 rounded-lg border border-border/80 bg-background px-3 text-sm outline-none ring-offset-background transition focus:ring-2 focus:ring-primary"
-              value={form.status}
-              onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
-                  status: e.target.value as TripForm["status"],
-                }))
-              }
-            >
-              <option value="planning">Planning</option>
-              <option value="planned">Planned</option>
-            </select>
           </label>
 
           <label className="grid gap-1 sm:col-span-2">
