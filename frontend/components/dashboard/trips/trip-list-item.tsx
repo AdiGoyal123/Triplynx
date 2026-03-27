@@ -13,12 +13,12 @@ export function TripListItem({ trip }: TripListItemProps) {
     <li>
       <Link
         href={`/dashboard/trips/${trip.id}`}
-        className="group flex items-start gap-3 rounded-2xl border border-border/90 bg-card p-4 text-left shadow-md shadow-black/[0.06] ring-1 ring-black/[0.03] transition duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg hover:shadow-black/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:gap-4 sm:p-5 dark:bg-card dark:shadow-black/25 dark:ring-white/[0.06] dark:hover:border-primary/40 dark:hover:shadow-black/40"
+        className="flex items-start gap-3 rounded-2xl border border-border/90 bg-card p-4 text-left shadow-md shadow-black/[0.06] ring-1 ring-black/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:gap-4 sm:p-5 dark:bg-card dark:shadow-black/25 dark:ring-white/[0.06]"
       >
         <div className="min-w-0 flex-1">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
             <div className="min-w-0">
-              <p className="text-base font-semibold tracking-tight text-foreground group-hover:text-foreground">
+              <p className="text-base font-semibold tracking-tight text-foreground">
                 {trip.title}
               </p>
               {trip.description ? (
@@ -27,7 +27,7 @@ export function TripListItem({ trip }: TripListItemProps) {
                 </p>
               ) : null}
             </div>
-            <span className="inline-flex w-fit shrink-0 items-center rounded-full border border-border/80 bg-muted/60 px-3 py-1 text-xs font-medium capitalize text-foreground/80 group-hover:border-primary/25 group-hover:bg-primary/10 group-hover:text-foreground">
+            <span className="inline-flex w-fit shrink-0 items-center rounded-full border border-border/80 bg-muted/60 px-3 py-1 text-xs font-medium capitalize text-foreground/80">
               {trip.status}
             </span>
           </div>
@@ -38,7 +38,7 @@ export function TripListItem({ trip }: TripListItemProps) {
           </p>
         </div>
         <ChevronRight
-          className="mt-1 h-5 w-5 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-foreground"
+          className="mt-1 h-5 w-5 shrink-0 text-muted-foreground"
           aria-hidden
         />
       </Link>
