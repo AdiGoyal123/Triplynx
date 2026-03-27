@@ -411,6 +411,6 @@ entrypoint = "./functions/create-trip/index.ts"
 
 [functions.add-trip-member]
 enabled = true
-verify_jwt = true
+verify_jwt = false
 import_map = "./functions/add-trip-member/deno.json"
 entrypoint = "./functions/add-trip-member/index.ts"

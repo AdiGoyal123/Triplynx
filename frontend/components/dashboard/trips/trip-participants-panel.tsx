@@ -117,11 +117,6 @@ export function TripParticipantsPanel({ tripId }: TripParticipantsPanelProps) {
   return (
     <section className="rounded-2xl border border-border/70 bg-background p-4 sm:p-6">
       <h2 className="text-lg font-semibold text-foreground">Trip members</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Add people to this trip via the <code className="rounded bg-muted px-1 py-0.5 text-xs">add-trip-member</code>{" "}
-        edge function. Members are stored in <code className="rounded bg-muted px-1 py-0.5 text-xs">trip_members</code>
-        .
-      </p>
 
       <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={onSubmit}>
         <label className="grid gap-1 sm:col-span-2">
