@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { PageIntro } from "@/components/dashboard/PageIntro";
+import { getSupabaseClient } from "@/lib/supabase/client";
 
 type TripForm = {
   title: string;
@@ -27,7 +28,7 @@ export default function TripsPage() {
   const [form, setForm] = useState<TripForm>(initialForm);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [previewTrip, setPreviewTrip] = useState<TripForm | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const hasDateRangeError = useMemo(() => {
     if (!form.startDate || !form.endDate) {
@@ -36,7 +37,7 @@ export default function TripsPage() {
     return new Date(form.endDate) < new Date(form.startDate);
   }, [form.endDate, form.startDate]);
 
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     setSuccess(null);
@@ -51,8 +52,57 @@ export default function TripsPage() {
       return;
     }
 
-    setPreviewTrip(form);
-    setSuccess("Trip draft captured locally. Backend save will be added with edge functions.");
+    const supabase = getSupabaseClient();
+
+    if (!supabase) {
+      setError(
+        "Missing Supabase env vars: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY."
+      );
+      return;
+    }
+
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError) {
+      setError(userError.message);
+      return;
+    }
+
+    if (!userData.user?.id) {
+      setError("You must be logged in to create a trip.");
+      return;
+    }
+
+    const descriptionSections = [
+      form.destination.trim() ? `Destination: ${form.destination.trim()}` : null,
+      form.budget.trim() ? `Budget: ${form.budget.trim()}` : null,
+      form.notes.trim() ? `Notes: ${form.notes.trim()}` : null,
+    ].filter(Boolean);
+
+    setIsSaving(true);
+    const { data, error: createTripError } = await supabase.functions.invoke("create-trip", {
+      body: {
+        title: form.title.trim(),
+        description: descriptionSections.length ? descriptionSections.join("\n") : null,
+        start_date: form.startDate || null,
+        end_date: form.endDate || null,
+        status: form.status,
+        created_by: userData.user.id,
+      },
+    });
+    console.log("create-trip function response:", { data, error: createTripError });
+    setIsSaving(false);
+
+    if (createTripError) {
+      setError(createTripError.message);
+      return;
+    }
+
+    if (data?.error) {
+      setError(data.error);
+      return;
+    }
+
+    setSuccess("Trip created successfully.");
     setForm(initialForm);
   };
 
@@ -63,7 +113,7 @@ export default function TripsPage() {
       <section className="rounded-2xl border border-border/70 bg-background p-4 sm:p-6">
         <h2 className="text-lg font-semibold text-foreground">Create a new trip</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          This form is UI-only for now. It does not call backend APIs yet.
+          Submit the form to create a trip via the Supabase edge function.
         </p>
 
         <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={onSubmit}>
@@ -156,42 +206,14 @@ export default function TripsPage() {
           <div className="sm:col-span-2">
             <button
               type="submit"
+              disabled={isSaving}
               className="inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:opacity-90"
             >
-              Save trip draft
+              {isSaving ? "Saving..." : "Create trip"}
             </button>
           </div>
         </form>
       </section>
-
-      {previewTrip ? (
-        <section className="rounded-2xl border border-border/70 bg-muted/30 p-4 sm:p-6">
-          <h3 className="text-base font-semibold text-foreground">Latest local draft</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            This preview helps you confirm form behavior before backend integration.
-          </p>
-          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="font-medium text-foreground">Title</dt>
-              <dd className="text-muted-foreground">{previewTrip.title || "N/A"}</dd>
-            </div>
-            <div>
-              <dt className="font-medium text-foreground">Destination</dt>
-              <dd className="text-muted-foreground">{previewTrip.destination || "N/A"}</dd>
-            </div>
-            <div>
-              <dt className="font-medium text-foreground">Dates</dt>
-              <dd className="text-muted-foreground">
-                {previewTrip.startDate || "N/A"} - {previewTrip.endDate || "N/A"}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-medium text-foreground">Status</dt>
-              <dd className="capitalize text-muted-foreground">{previewTrip.status}</dd>
-            </div>
-          </dl>
-        </section>
-      ) : null}
     </div>
   );
 }
