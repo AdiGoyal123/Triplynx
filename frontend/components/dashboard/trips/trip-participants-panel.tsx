@@ -1,55 +1,108 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { UserMinus } from "lucide-react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { getSupabaseClient } from "@/lib/supabase/client";
 import type { TripMember } from "./types";
 
 type TripParticipantsPanelProps = {
   tripId: string;
-  addedByUserId: string | null;
 };
 
 const inputClass =
   "h-10 rounded-lg border border-border/80 bg-background px-3 text-sm outline-none ring-offset-background transition placeholder:text-muted-foreground focus:ring-2 focus:ring-primary";
 
-export function TripParticipantsPanel({ tripId, addedByUserId }: TripParticipantsPanelProps) {
+const memberSelect =
+  "id, trip_id, added_by, display_name, email, phone, created_at, updated_at";
+
+export function TripParticipantsPanel({ tripId }: TripParticipantsPanelProps) {
   const [members, setMembers] = useState<TripMember[]>([]);
+  const [membersLoading, setMembersLoading] = useState(true);
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const loadMembers = useCallback(async () => {
+    const supabase = getSupabaseClient();
+    if (!supabase || !tripId.trim()) {
+      setMembers([]);
+      setMembersLoading(false);
+      return;
+    }
+    setMembersLoading(true);
+    const { data, error } = await supabase
+      .from("trip_members")
+      .select(memberSelect)
+      .eq("trip_id", tripId)
+      .order("created_at", { ascending: false });
+
+    if (!error && data) {
+      setMembers(data as TripMember[]);
+    } else {
+      setMembers([]);
+    }
+    setMembersLoading(false);
+  }, [tripId]);
+
+  useEffect(() => {
+    void loadMembers();
+  }, [loadMembers]);
+
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setSubmitError(null);
+
     if (!tripId.trim()) {
       return;
     }
+
     const dn = displayName.trim() || null;
     const em = email.trim() || null;
     const ph = phone.trim() || null;
     if (!dn && !em && !ph) {
       return;
     }
-    const now = new Date().toISOString();
-    setMembers((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
+
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setSubmitError(
+        "Missing Supabase env vars: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY.",
+      );
+      return;
+    }
+
+    setIsSaving(true);
+    const { data, error: invokeError } = await supabase.functions.invoke("add-trip-member", {
+      body: {
         trip_id: tripId,
-        added_by: addedByUserId,
         display_name: dn,
         email: em,
         phone: ph,
-        created_at: now,
-        updated_at: null,
       },
-    ]);
-    setDisplayNorm("");
+    });
+    setIsSaving(false);
+
+    if (invokeError) {
+      setSubmitError(invokeError.message);
+      return;
+    }
+
+    if (data && typeof data === "object" && "error" in data && data.error) {
+      setSubmitError(String(data.error));
+      return;
+    }
+
+    const member = data && typeof data === "object" && "member" in data ? data.member : null;
+    if (member && typeof member === "object") {
+      setMembers((prev) => [member as TripMember, ...prev]);
+    } else {
+      await loadMembers();
+    }
+
+    setDisplayName("");
     setEmail("");
     setPhone("");
-  };
-
-  const remove = (id: string) => {
-    setMembers((prev) => prev.filter((m) => m.id !== id));
   };
 
   const labelForRow = (m: TripMember) => m.display_name?.trim() || m.email || m.phone || "Member";
@@ -65,8 +118,9 @@ export function TripParticipantsPanel({ tripId, addedByUserId }: TripParticipant
     <section className="rounded-2xl border border-border/70 bg-background p-4 sm:p-6">
       <h2 className="text-lg font-semibold text-foreground">Trip members</h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Fields match your <code className="rounded bg-muted px-1 py-0.5 text-xs">trip_members</code>{" "}
-        table. Rows are stored in this session only until you wire up the API.
+        Add people to this trip via the <code className="rounded bg-muted px-1 py-0.5 text-xs">add-trip-member</code>{" "}
+        edge function. Members are stored in <code className="rounded bg-muted px-1 py-0.5 text-xs">trip_members</code>
+        .
       </p>
 
       <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={onSubmit}>
@@ -78,6 +132,7 @@ export function TripParticipantsPanel({ tripId, addedByUserId }: TripParticipant
             onChange={(e) => setDisplayName(e.target.value)}
             placeholder="Alex Kim"
             autoComplete="name"
+            disabled={isSaving}
           />
         </label>
 
@@ -90,6 +145,7 @@ export function TripParticipantsPanel({ tripId, addedByUserId }: TripParticipant
             onChange={(e) => setEmail(e.target.value)}
             placeholder="alex@example.com"
             autoComplete="email"
+            disabled={isSaving}
           />
         </label>
 
@@ -102,46 +158,41 @@ export function TripParticipantsPanel({ tripId, addedByUserId }: TripParticipant
             onChange={(e) => setPhone(e.target.value)}
             placeholder="+1 555 0100"
             autoComplete="tel"
+            disabled={isSaving}
           />
         </label>
 
         <p className="text-xs text-muted-foreground sm:col-span-2">
-          At least one of display name, email, or phone is required. Nullable columns on the server
-          still need something to show here.
+          At least one of display name, email, or phone is required.
         </p>
+
+        {submitError ? (
+          <p className="text-sm text-red-500 sm:col-span-2">{submitError}</p>
+        ) : null}
 
         <div className="sm:col-span-2">
           <button
             type="submit"
-            disabled={!tripId.trim()}
+            disabled={!tripId.trim() || isSaving}
             className="inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:pointer-events-none disabled:opacity-50"
           >
-            Add member
+            {isSaving ? "Adding…" : "Add member"}
           </button>
         </div>
       </form>
 
-      {members.length > 0 ? (
+      {membersLoading ? (
+        <p className="mt-6 text-sm text-muted-foreground">Loading members…</p>
+      ) : members.length > 0 ? (
         <ul className="mt-8 divide-y divide-border/60 border-t border-border/60 pt-6">
           {members.map((m) => (
-            <li
-              key={m.id}
-              className="flex items-start justify-between gap-3 py-3 first:pt-0"
-            >
+            <li key={m.id} className="py-3 first:pt-0">
               <div className="min-w-0 space-y-0.5">
                 <p className="font-medium text-foreground">{labelForRow(m)}</p>
                 {subtitleForRow(m) ? (
                   <p className="text-sm text-muted-foreground">{subtitleForRow(m)}</p>
                 ) : null}
               </div>
-              <button
-                type="button"
-                onClick={() => remove(m.id)}
-                className="shrink-0 rounded-lg p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                aria-label={`Remove ${labelForRow(m)}`}
-              >
-                <UserMinus className="h-4 w-4" />
-              </button>
             </li>
           ))}
         </ul>

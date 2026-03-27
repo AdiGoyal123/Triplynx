@@ -2,29 +2,15 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { PageIntro } from "@/components/dashboard/PageIntro";
 import { TripParticipantsPanel } from "@/components/dashboard/trips/trip-participants-panel";
 import { useMyTrips } from "@/components/dashboard/trips/use-my-trips";
-import { getSupabaseClient } from "@/lib/supabase/client";
 
 export default function TripDetailPage() {
   const params = useParams();
   const tripId =
     typeof params.tripId === "string" ? params.tripId : Array.isArray(params.tripId) ? params.tripId[0] ?? "" : "";
-
-  const [addedByUserId, setAddedByUserId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const supabase = getSupabaseClient();
-    if (!supabase) {
-      return;
-    }
-    void supabase.auth.getUser().then(({ data }) => {
-      setAddedByUserId(data.user?.id ?? null);
-    });
-  }, []);
 
   const { trips, loading } = useMyTrips();
   const trip = trips.find((t) => t.id === tripId);
@@ -54,7 +40,7 @@ export default function TripDetailPage() {
 
       <PageIntro title={title} description={description} />
 
-      <TripParticipantsPanel tripId={tripId} addedByUserId={addedByUserId} />
+      <TripParticipantsPanel tripId={tripId} />
     </div>
   );
 }
