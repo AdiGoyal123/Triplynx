@@ -135,12 +135,19 @@ export function AppShell({ children }: AppShellProps) {
           </SidebarGroup>
         </SidebarContent>
 
-        <SidebarFooter className="p-2">
-          <div className="flex items-center gap-2 rounded-md border border-border p-2 group-data-[collapsible=icon]:justify-center">
+        <SidebarFooter className="p-2 group-data-[collapsible=icon]:p-1.5">
+          <div className="flex items-center gap-2 rounded-md border border-border p-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:p-0">
             {avatarUrl ? (
-              <img src={avatarUrl} alt={userName} className="size-8 rounded-full object-cover" />
+              <span className="relative size-8 shrink-0 overflow-hidden rounded-full bg-muted ring-1 ring-border/60">
+                <img
+                  src={avatarUrl}
+                  alt={userName}
+                  className="size-full object-cover"
+                  sizes="32px"
+                />
+              </span>
             ) : (
-              <div className="flex size-8 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold ring-1 ring-border/60">
                 {userName.charAt(0).toUpperCase()}
               </div>
             )}
@@ -154,7 +161,7 @@ export function AppShell({ children }: AppShellProps) {
             variant="outline"
             onClick={handleSignOut}
             disabled={isSigningOut}
-            className="hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+            className="hover:border-red-300 hover:bg-red-50 hover:text-red-700 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:p-0"
           >
             <LogOut />
             <span className="group-data-[collapsible=icon]:hidden">
