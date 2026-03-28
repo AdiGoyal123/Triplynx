@@ -8,6 +8,7 @@ import { PageIntro } from "@/components/dashboard/PageIntro";
 import { AddTripMemberFab } from "@/components/dashboard/trips/add-trip-member-fab";
 import { AddTripMemberModal } from "@/components/dashboard/trips/add-trip-member-modal";
 import { TripParticipantsPanel } from "@/components/dashboard/trips/trip-participants-panel";
+import { TripSurveysSection } from "@/components/dashboard/trips/trip-surveys-section";
 import { useMyTrips } from "@/components/dashboard/trips/use-my-trips";
 
 export default function TripDetailPage() {
@@ -56,21 +57,7 @@ export default function TripDetailPage() {
 
       <TripParticipantsPanel tripId={tripId} reloadSignal={membersReload} />
 
-      <section className="rounded-2xl border border-border/70 bg-background p-4 sm:p-6">
-        <h2 className="text-lg font-semibold text-foreground">Surveys</h2>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Surveys/Polls for this trip will appear here soon 🔜
-        </p>
-        <div className="mt-5">
-          <button
-            type="button"
-            disabled
-            className="inline-flex h-10 cursor-not-allowed items-center rounded-lg border border-border/80 bg-muted/40 px-4 text-sm font-medium text-muted-foreground"
-          >
-            Create survey
-          </button>
-        </div>
-      </section>
+      <TripSurveysSection tripId={tripId} />
 
       {tripId.trim() ? (
         <>
