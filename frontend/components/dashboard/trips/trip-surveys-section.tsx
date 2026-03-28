@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { CreateSurveyModal } from "./create-survey-modal";
-import type { Survey } from "./types";
+import type { Survey, SurveyOption } from "./types";
 
 type TripSurveysSectionProps = {
   tripId: string;
@@ -20,6 +20,31 @@ function formatWhen(iso: string | null) {
   } catch {
     return iso;
   }
+}
+
+function SurveyOptionsPreview({ options }: { options: SurveyOption[] }) {
+  if (options.length === 0) {
+    return (
+      <p className="mt-4 text-xs text-muted-foreground">
+        <span className="font-medium text-foreground/80">survey_options:</span> none
+      </p>
+    );
+  }
+  return (
+    <div className="mt-4">
+      <p className="text-xs font-medium text-foreground/80">survey_options</p>
+      <ul className="mt-2 space-y-2 rounded-lg border border-border/50 bg-muted/15 p-3">
+        {options.map((o) => (
+          <li key={o.id} className="text-xs text-muted-foreground">
+            <p className="text-sm text-foreground">{o.label ?? o.value ?? "—"}</p>
+            <div className="mt-1 font-mono text-[10px] leading-relaxed opacity-90">
+              id {o.id} · survey_id {o.survey_id} · metadata {JSON.stringify(o.metadata)}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 function statusBadgeClass(status: Survey["status"]) {
@@ -113,6 +138,8 @@ export function TripSurveysSection({ tripId }: TripSurveysSectionProps) {
                     <dd className="mt-0.5">{formatWhen(s.closes_at)}</dd>
                   </div>
                 </dl>
+
+                <SurveyOptionsPreview options={s.options} />
               </li>
             ))}
           </ul>

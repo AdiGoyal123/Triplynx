@@ -26,8 +26,24 @@ export const initialTripForm: TripForm = {
 export type SurveyStatus = "draft" | "ongoing" | "closed";
 
 /**
+ * Matches `public.survey_options` (client-side).
+ * For a single “option” line in the UI, we store the same text in both `label` and `value`
+ * so the DB shape stays valid without asking users for two fields.
+ */
+export type SurveyOption = {
+  id: string;
+  created_at: string;
+  survey_id: string;
+  label: string | null;
+  value: string | null;
+  metadata: Record<string, unknown>;
+  updated_at: string | null;
+};
+
+/**
  * Matches `public.surveys` (client-side / local draft until API exists).
  * `created_by` uses a placeholder UUID until persistence wires auth.
+ * `options` mirrors `survey_options` rows for this survey.
  */
 export type Survey = {
   id: string;
@@ -40,7 +56,18 @@ export type Survey = {
   closes_at: string | null;
   updated_at: string;
   status: SurveyStatus | null;
+  options: SurveyOption[];
 };
+
+/** One editable “option” row in the create-survey form (what voters will choose). */
+export type SurveyOptionDraft = {
+  clientKey: string;
+  text: string;
+};
+
+export function newSurveyOptionDraft(): SurveyOptionDraft {
+  return { clientKey: crypto.randomUUID(), text: "" };
+}
 
 export type SurveyFormFields = {
   title: string;
@@ -48,6 +75,7 @@ export type SurveyFormFields = {
   opensAt: string;
   closesAt: string;
   status: SurveyStatus | "";
+  optionRows: SurveyOptionDraft[];
 };
 
 export const initialSurveyForm: SurveyFormFields = {
@@ -56,6 +84,7 @@ export const initialSurveyForm: SurveyFormFields = {
   opensAt: "",
   closesAt: "",
   status: "draft",
+  optionRows: [],
 };
 
 /** Matches `public.trip_members` columns (client-side / pre-insert). */

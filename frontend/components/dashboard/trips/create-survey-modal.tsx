@@ -1,11 +1,14 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { Plus, Trash2, X } from "lucide-react";
 import {
   initialSurveyForm,
+  newSurveyOptionDraft,
   type Survey,
   type SurveyFormFields,
+  type SurveyOption,
+  type SurveyOptionDraft,
   type SurveyStatus,
 } from "./types";
 
@@ -21,12 +24,30 @@ type CreateSurveyModalProps = {
 const inputClass =
   "h-10 rounded-lg border border-border/80 bg-background px-3 text-sm outline-none ring-offset-background transition placeholder:text-muted-foreground focus:ring-2 focus:ring-primary";
 
+function buildSurveyOptions(surveyId: string, rows: SurveyOptionDraft[], timestamp: string): SurveyOption[] {
+  return rows
+    .filter((r) => r.text.trim())
+    .map((r) => {
+      const t = r.text.trim();
+      return {
+        id: crypto.randomUUID(),
+        created_at: timestamp,
+        survey_id: surveyId,
+        label: t,
+        value: t,
+        metadata: {},
+        updated_at: timestamp,
+      };
+    });
+}
+
 function buildSurvey(tripId: string, form: SurveyFormFields): Survey {
   const now = new Date().toISOString();
   const status: SurveyStatus | null =
     form.status === "" ? null : (form.status as SurveyStatus);
+  const id = crypto.randomUUID();
   return {
-    id: crypto.randomUUID(),
+    id,
     created_at: now,
     updated_at: now,
     trip_id: tripId,
@@ -36,6 +57,7 @@ function buildSurvey(tripId: string, form: SurveyFormFields): Survey {
     opens_at: form.opensAt ? new Date(form.opensAt).toISOString() : null,
     closes_at: form.closesAt ? new Date(form.closesAt).toISOString() : null,
     status,
+    options: buildSurveyOptions(id, form.optionRows, now),
   };
 }
 
@@ -75,6 +97,24 @@ export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSu
     }
     return new Date(form.closesAt) < new Date(form.opensAt);
   }, [form.closesAt, form.opensAt]);
+
+  const addOptionRow = () => {
+    setForm((p) => ({ ...p, optionRows: [...p.optionRows, newSurveyOptionDraft()] }));
+  };
+
+  const removeOptionRow = (clientKey: string) => {
+    setForm((p) => ({
+      ...p,
+      optionRows: p.optionRows.filter((r) => r.clientKey !== clientKey),
+    }));
+  };
+
+  const updateOptionRow = (clientKey: string, patch: Partial<Pick<SurveyOptionDraft, "text">>) => {
+    setForm((p) => ({
+      ...p,
+      optionRows: p.optionRows.map((r) => (r.clientKey === clientKey ? { ...r, ...patch } : r)),
+    }));
+  };
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -116,10 +156,10 @@ export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSu
         role="dialog"
         aria-modal="true"
         aria-labelledby="create-survey-title"
-        className="relative z-10 flex max-h-[min(90vh,640px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border/70 bg-background shadow-xl"
+        className="relative z-10 flex max-h-[min(92vh,720px)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-border/70 bg-background shadow-xl"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
           <div>
             <h2 id="create-survey-title" className="text-lg font-semibold text-foreground">
               Create survey
@@ -138,7 +178,7 @@ export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSu
           </button>
         </div>
 
-        <form className="grid max-h-full gap-4 overflow-y-auto p-5" onSubmit={onSubmit}>
+        <form className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-5" onSubmit={onSubmit}>
           <label className="grid gap-1">
             <span className="text-sm font-medium">Title</span>
             <input
@@ -153,7 +193,7 @@ export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSu
           <label className="grid gap-1">
             <span className="text-sm font-medium">Description (optional)</span>
             <textarea
-              className="min-h-24 rounded-lg border border-border/80 bg-background px-3 py-2 text-sm outline-none ring-offset-background transition placeholder:text-muted-foreground focus:ring-2 focus:ring-primary"
+              className="min-h-20 rounded-lg border border-border/80 bg-background px-3 py-2 text-sm outline-none ring-offset-background transition placeholder:text-muted-foreground focus:ring-2 focus:ring-primary"
               value={form.description}
               onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
               placeholder="What should the group vote on?"
@@ -200,12 +240,62 @@ export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSu
             </select>
           </label>
 
+          <div className="border-t border-border/60 pt-4">
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <p className="text-sm font-medium text-foreground">Options (optional)</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Choices voters can pick. Empty rows are ignored.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={addOptionRow}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3 text-sm font-medium transition hover:bg-muted"
+              >
+                <Plus className="h-4 w-4" aria-hidden />
+                Add option
+              </button>
+            </div>
+
+            {form.optionRows.length === 0 ? (
+              <p className="mt-3 text-sm text-muted-foreground">No options yet — add some, or leave empty.</p>
+            ) : (
+              <ul className="mt-3 space-y-3">
+                {form.optionRows.map((row) => (
+                  <li
+                    key={row.clientKey}
+                    className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 p-3"
+                  >
+                    <label className="grid min-w-0 flex-1 gap-1">
+                      <span className="text-xs font-medium text-muted-foreground">Option</span>
+                      <input
+                        className={inputClass}
+                        value={row.text}
+                        onChange={(e) => updateOptionRow(row.clientKey, { text: e.target.value })}
+                        placeholder="e.g. Hyatt downtown"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => removeOptionRow(row.clientKey)}
+                      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border/80 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                      aria-label="Remove option"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           {error ? <p className="text-sm text-red-500">{error}</p> : null}
           {rangeError ? (
             <p className="text-sm text-amber-600">Close time is before open time.</p>
           ) : null}
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 border-t border-border/60 pt-2">
             <button
               type="button"
               onClick={resetAndClose}
