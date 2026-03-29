@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { CreateSurveyModal } from "./create-survey-modal";
 import type { Survey, SurveyOption } from "./types";
 
@@ -61,12 +61,8 @@ function statusBadgeClass(status: Survey["status"]) {
 }
 
 export function TripSurveysSection({ tripId }: TripSurveysSectionProps) {
-  const [surveys, setSurveys] = useState<Survey[]>([]);
+  const [surveys] = useState<Survey[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
-
-  const onSurveyCreated = useCallback((survey: Survey) => {
-    setSurveys((prev) => [survey, ...prev]);
-  }, []);
 
   if (!tripId.trim()) {
     return null;
@@ -79,7 +75,8 @@ export function TripSurveysSection({ tripId }: TripSurveysSectionProps) {
           <div>
             <h2 className="text-lg font-semibold text-foreground">Surveys</h2>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              Draft surveys for this trip. Data stays in this browser session until the API is connected.
+              Creating a survey calls the create-survey Edge Function on Supabase. Listed surveys will appear
+              here once they are saved and loaded from the database.
             </p>
           </div>
           <button
@@ -146,12 +143,7 @@ export function TripSurveysSection({ tripId }: TripSurveysSectionProps) {
         )}
       </section>
 
-      <CreateSurveyModal
-        tripId={tripId}
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onCreated={onSurveyCreated}
-      />
+      <CreateSurveyModal tripId={tripId} open={createOpen} onClose={() => setCreateOpen(false)} />
     </>
   );
 }

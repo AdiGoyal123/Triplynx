@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, X } from "lucide-react";
+import { getSupabaseClient } from "@/lib/supabase/client";
 import {
   initialSurveyForm,
   newSurveyOptionDraft,
@@ -18,7 +19,6 @@ type CreateSurveyModalProps = {
   tripId: string;
   open: boolean;
   onClose: () => void;
-  onCreated: (survey: Survey) => void;
 };
 
 const inputClass =
@@ -61,13 +61,17 @@ function buildSurvey(tripId: string, form: SurveyFormFields): Survey {
   };
 }
 
-export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSurveyModalProps) {
+export function CreateSurveyModal({ tripId, open, onClose }: CreateSurveyModalProps) {
   const [form, setForm] = useState<SurveyFormFields>(initialSurveyForm);
   const [error, setError] = useState<string | null>(null);
+  const [serverMessage, setServerMessage] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const resetAndClose = () => {
     setForm(initialSurveyForm);
     setError(null);
+    setServerMessage(null);
+    setSubmitting(false);
     onClose();
   };
 
@@ -79,6 +83,7 @@ export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSu
       if (e.key === "Escape") {
         setForm(initialSurveyForm);
         setError(null);
+        setServerMessage(null);
         onClose();
       }
     };
@@ -116,9 +121,10 @@ export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSu
     }));
   };
 
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
+    setServerMessage(null);
 
     if (!tripId.trim()) {
       setError("Missing trip.");
@@ -135,9 +141,56 @@ export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSu
       return;
     }
 
-    onCreated(buildSurvey(tripId, form));
-    setForm(initialSurveyForm);
-    onClose();
+    const survey = buildSurvey(tripId, form);
+
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setError(
+        "Missing Supabase env vars: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY.",
+      );
+      return;
+    }
+
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError) {
+      setError(userError.message);
+      return;
+    }
+    if (!userData.user?.id) {
+      setError("You must be logged in to create a survey.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke("create-survey", {
+        body: survey,
+      });
+
+      if (invokeError) {
+        setError(invokeError.message);
+        return;
+      }
+
+      if (data && typeof data === "object" && "error" in data && data.error) {
+        setError(String(data.error));
+        return;
+      }
+
+      const messageFromBody =
+        data &&
+        typeof data === "object" &&
+        "message" in data &&
+        typeof (data as { message: unknown }).message === "string"
+          ? (data as { message: string }).message
+          : null;
+
+      setServerMessage(messageFromBody ?? "Request completed.");
+    } catch {
+      setError("Could not reach the server. Check your connection and try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (!open) {
@@ -165,7 +218,7 @@ export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSu
               Create survey
             </h2>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              Local preview only — not saved to the server yet.
+              Submits to your Supabase backend (Edge Function) when you add a survey.
             </p>
           </div>
           <button
@@ -291,6 +344,14 @@ export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSu
           </div>
 
           {error ? <p className="text-sm text-red-500">{error}</p> : null}
+          {serverMessage ? (
+            <p
+              className="rounded-lg border border-border/80 bg-muted/40 px-3 py-2 text-sm text-foreground"
+              role="status"
+            >
+              {serverMessage}
+            </p>
+          ) : null}
           {rangeError ? (
             <p className="text-sm text-amber-600">Close time is before open time.</p>
           ) : null}
@@ -299,15 +360,17 @@ export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSu
             <button
               type="button"
               onClick={resetAndClose}
-              className="inline-flex h-10 items-center rounded-lg border border-border/80 bg-background px-4 text-sm font-medium transition hover:bg-muted"
+              disabled={submitting}
+              className="inline-flex h-10 items-center rounded-lg border border-border/80 bg-background px-4 text-sm font-medium transition hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+              disabled={submitting}
+              className="inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:pointer-events-none disabled:opacity-50"
             >
-              Add survey
+              {submitting ? "Sending…" : "Add survey"}
             </button>
           </div>
         </form>
