@@ -24,6 +24,38 @@ type CreateSurveyModalProps = {
 const inputClass =
   "h-10 rounded-lg border border-border/80 bg-background px-3 text-sm outline-none ring-offset-background transition placeholder:text-muted-foreground focus:ring-2 focus:ring-primary";
 
+/** Prefer JSON `message` / `error` from the Edge Function body over the generic invoke error string. */
+async function messageFromEdgeFunctionFailure(err: unknown, response?: Response): Promise<string> {
+  if (response) {
+    try {
+      const contentType = response.headers.get("Content-Type") ?? "";
+      if (contentType.includes("application/json")) {
+        const body: unknown = await response.json();
+        if (body && typeof body === "object") {
+          const o = body as Record<string, unknown>;
+          if (typeof o.message === "string" && o.message.trim()) {
+            return o.message.trim();
+          }
+          if (typeof o.error === "string" && o.error.trim()) {
+            return o.error.trim();
+          }
+        }
+      } else {
+        const text = (await response.text()).trim();
+        if (text) {
+          return text;
+        }
+      }
+    } catch {
+      /* use fallback below */
+    }
+  }
+  if (err instanceof Error && err.message) {
+    return err.message;
+  }
+  return "Request failed.";
+}
+
 function buildSurveyOptions(surveyId: string, rows: SurveyOptionDraft[], timestamp: string): SurveyOption[] {
   return rows
     .filter((r) => r.text.trim())
@@ -163,12 +195,15 @@ export function CreateSurveyModal({ tripId, open, onClose }: CreateSurveyModalPr
 
     setSubmitting(true);
     try {
-      const { data, error: invokeError } = await supabase.functions.invoke("create-survey", {
-        body: survey,
-      });
+      const { data, error: invokeError, response: fnResponse } = await supabase.functions.invoke(
+        "create-survey",
+        {
+          body: survey,
+        },
+      );
 
       if (invokeError) {
-        setError(invokeError.message);
+        setError(await messageFromEdgeFunctionFailure(invokeError, fnResponse));
         return;
       }
 
