@@ -153,6 +153,9 @@ function statusBadgeClass(status: Survey["status"]) {
   if (status === "ongoing") {
     return "bg-emerald-500/15 text-emerald-900 dark:text-emerald-100";
   }
+  if (status === "scheduled") {
+    return "bg-sky-500/15 text-sky-950 dark:text-sky-100";
+  }
   if (status === "closed") {
     return "bg-muted text-muted-foreground";
   }

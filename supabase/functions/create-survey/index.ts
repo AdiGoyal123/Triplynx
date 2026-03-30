@@ -7,7 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 }
 
-const SURVEY_STATUSES = new Set(["draft", "ongoing", "closed"])
+const OPEN_TIME_SLACK_MS = 60_000
 
 const OPEN_TIME_SLACK_MS = 60_000
 const HOURS_DEFAULT_WINDOW = 24
@@ -163,20 +163,10 @@ Deno.serve(async (req) => {
       closesAtIso = new Date(closesRaw).toISOString()
     }
 
-    let status: string | null = null
-    if (payload.status != null && String(payload.status).trim() !== "") {
-      const s = String(payload.status).trim()
-      if (!SURVEY_STATUSES.has(s)) {
-        return new Response(
-          JSON.stringify({ error: "status must be one of: draft, ongoing, closed." }),
-          {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-            status: 400,
-          },
-        )
-      }
-      status = s
-    }
+    const openMs = new Date(opensAtIso).getTime()
+    const nowMs = Date.now()
+    const status =
+      !Number.isNaN(openMs) && openMs <= nowMs + OPEN_TIME_SLACK_MS ? "ongoing" : "scheduled"
 
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false },

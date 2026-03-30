@@ -23,7 +23,7 @@ export const initialTripForm: TripForm = {
 };
 
 /** Matches `public.survey_status`. */
-export type SurveyStatus = "draft" | "ongoing" | "closed";
+export type SurveyStatus = "draft" | "scheduled" | "ongoing" | "closed";
 
 /**
  * Matches `public.survey_options` (client-side).
@@ -74,7 +74,6 @@ export type SurveyFormFields = {
   description: string;
   opensAt: string;
   closesAt: string;
-  status: SurveyStatus | "";
   optionRows: SurveyOptionDraft[];
 };
 
@@ -83,7 +82,6 @@ export const initialSurveyForm: SurveyFormFields = {
   description: "",
   opensAt: "",
   closesAt: "",
-  status: "draft",
   optionRows: [],
 };
 

@@ -125,7 +125,7 @@ export function useTripSurveys(tripId: string) {
     const next: Survey[] = surveyRows.map((r) => {
       const st = r.status;
       const status: SurveyStatus | null =
-        st === "draft" || st === "ongoing" || st === "closed" ? st : null;
+        st === "draft" || st === "scheduled" || st === "ongoing" || st === "closed" ? st : null;
       return {
         id: r.id,
         created_at: r.created_at,

@@ -127,7 +127,12 @@ function surveyFromCreateResponse(raw: unknown): Survey | null {
   const optionsRaw = Array.isArray(s.options) ? s.options : [];
   const statusVal = s.status;
   const status: SurveyStatus | null =
-    statusVal === "draft" || statusVal === "ongoing" || statusVal === "closed" ? statusVal : null;
+    statusVal === "draft" ||
+    statusVal === "scheduled" ||
+    statusVal === "ongoing" ||
+    statusVal === "closed"
+      ? statusVal
+      : null;
   return {
     id: s.id,
     created_at: String(s.created_at),
@@ -160,6 +165,15 @@ function buildSurveyOptions(surveyId: string, rows: SurveyOptionDraft[], timesta
     });
 }
 
+/** Status is derived from opens_at only: starts now (within slack) → ongoing, else scheduled. */
+function deriveSurveyStatusFromOpensAt(opensAtIso: string): SurveyStatus {
+  const openMs = new Date(opensAtIso).getTime();
+  if (Number.isNaN(openMs)) {
+    return "scheduled";
+  }
+  return openMs <= Date.now() + OPEN_TIME_SLACK_MS ? "ongoing" : "scheduled";
+}
+
 function buildSurvey(
   tripId: string,
   form: SurveyFormFields,
@@ -167,8 +181,7 @@ function buildSurvey(
   schedule: { opens_at: string; closes_at: string },
 ): Survey {
   const now = new Date().toISOString();
-  const status: SurveyStatus | null =
-    form.status === "" ? null : (form.status as SurveyStatus);
+  const status = deriveSurveyStatusFromOpensAt(schedule.opens_at);
   const id = crypto.randomUUID();
   return {
     id,
@@ -438,24 +451,11 @@ export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSu
             </div>
           </div>
 
-          <label className="grid gap-1">
-            <span className="text-sm font-medium">Status (optional)</span>
-            <select
-              className={inputClass}
-              value={form.status}
-              onChange={(e) =>
-                setForm((p) => ({
-                  ...p,
-                  status: e.target.value as SurveyFormFields["status"],
-                }))
-              }
-            >
-              <option value="">— None —</option>
-              <option value="draft">draft</option>
-              <option value="ongoing">ongoing</option>
-              <option value="closed">closed</option>
-            </select>
-          </label>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Status is set automatically: <span className="font-medium text-foreground/90">Ongoing</span> when voting
+            starts now (including the default 24-hour window), or{" "}
+            <span className="font-medium text-foreground/90">Scheduled</span> when the start time is in the future.
+          </p>
 
           <div className="border-t border-border/60 pt-4">
             <div className="flex flex-wrap items-end justify-between gap-2">
