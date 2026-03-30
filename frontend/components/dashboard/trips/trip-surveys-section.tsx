@@ -23,25 +23,89 @@ function formatWhen(iso: string | null) {
   }
 }
 
-function SurveyOptionsPreview({ options }: { options: SurveyOption[] }) {
+function parseIsoMs(iso: string | null): number | null {
+  if (!iso) {
+    return null;
+  }
+  const t = new Date(iso).getTime();
+  return Number.isNaN(t) ? null : t;
+}
+
+/** Human-readable duration for “in X” / “X left”. */
+function formatDurationRough(ms: number): string {
+  const abs = Math.abs(ms);
+  const minutes = Math.floor(abs / 60_000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  if (days > 0) {
+    return `${days} day${days === 1 ? "" : "s"}`;
+  }
+  if (hours > 0) {
+    return `${hours} hour${hours === 1 ? "" : "s"}`;
+  }
+  if (minutes > 0) {
+    return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  }
+  return "less than a minute";
+}
+
+function surveyScheduleContext(s: Survey): {
+  scheduleLine: string;
+  highlight: string | null;
+  highlightTone: "muted" | "live" | "done";
+} {
+  const now = Date.now();
+  const openMs = parseIsoMs(s.opens_at);
+  const closeMs = parseIsoMs(s.closes_at);
+
+  if (openMs === null || closeMs === null) {
+    return {
+      scheduleLine: "Schedule not available.",
+      highlight: null,
+      highlightTone: "muted",
+    };
+  }
+
+  if (now < openMs) {
+    return {
+      scheduleLine: `Opens ${formatWhen(s.opens_at)} · Closes ${formatWhen(s.closes_at)}`,
+      highlight: `Opens in ${formatDurationRough(openMs - now)}`,
+      highlightTone: "muted",
+    };
+  }
+
+  if (now >= closeMs) {
+    return {
+      scheduleLine: `Voting was open ${formatWhen(s.opens_at)} – ${formatWhen(s.closes_at)}`,
+      highlight: "Voting has ended",
+      highlightTone: "done",
+    };
+  }
+
+  return {
+    scheduleLine: `Voting open ${formatWhen(s.opens_at)} – ${formatWhen(s.closes_at)}`,
+    highlight: `${formatDurationRough(closeMs - now)} left to respond`,
+    highlightTone: "live",
+  };
+}
+
+function formatStatusLabel(status: Survey["status"]): string {
+  if (!status) {
+    return "Unset";
+  }
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function SurveyChoices({ options }: { options: SurveyOption[] }) {
   if (options.length === 0) {
-    return (
-      <p className="mt-4 text-xs text-muted-foreground">
-        <span className="font-medium text-foreground/80">survey_options:</span> none
-      </p>
-    );
+    return <p className="mt-3 text-sm text-muted-foreground">No answer choices listed yet.</p>;
   }
   return (
-    <div className="mt-4">
-      <p className="text-xs font-medium text-foreground/80">survey_options</p>
-      <ul className="mt-2 space-y-2 rounded-lg border border-border/50 bg-muted/15 p-3">
+    <div className="mt-3">
+      <p className="text-xs font-medium text-muted-foreground">Choices</p>
+      <ul className="mt-1.5 list-inside list-disc space-y-1 text-sm text-foreground">
         {options.map((o) => (
-          <li key={o.id} className="text-xs text-muted-foreground">
-            <p className="text-sm text-foreground">{o.label ?? o.value ?? "—"}</p>
-            <div className="mt-1 font-mono text-[10px] leading-relaxed opacity-90">
-              id {o.id} · survey_id {o.survey_id} · metadata {JSON.stringify(o.metadata)}
-            </div>
-          </li>
+          <li key={o.id}>{o.label ?? o.value ?? "—"}</li>
         ))}
       </ul>
     </div>
@@ -80,8 +144,7 @@ export function TripSurveysSection({ tripId }: TripSurveysSectionProps) {
           <div>
             <h2 className="text-lg font-semibold text-foreground">Surveys</h2>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              Surveys for this trip load from your database (new surveys are created via the create-survey Edge
-              Function).
+              Ask the group a question, set voting times, and see how long participants have left to respond.
             </p>
           </div>
           <button
@@ -97,56 +160,43 @@ export function TripSurveysSection({ tripId }: TripSurveysSectionProps) {
         {loading ? (
           <p className="mt-6 text-sm text-muted-foreground">Loading surveys…</p>
         ) : !loadError && surveys.length === 0 ? (
-          <p className="mt-6 text-sm text-muted-foreground">No surveys yet. Create one to see the structure here.</p>
+          <p className="mt-6 text-sm text-muted-foreground">
+            No surveys yet. Create one to collect votes from the group.
+          </p>
         ) : !loadError ? (
           <ul className="mt-6 divide-y divide-border/60 border-t border-border/60 pt-6">
-            {surveys.map((s) => (
-              <li key={s.id} className="py-4 first:pt-0">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <p className="font-medium text-foreground">{s.title}</p>
-                  <span
-                    className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadgeClass(s.status)}`}
-                  >
-                    {s.status ?? "—"}
-                  </span>
-                </div>
-                {s.description ? (
-                  <p className="mt-1 text-sm text-muted-foreground">{s.description}</p>
-                ) : null}
-                <dl className="mt-3 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
-                  <div>
-                    <dt className="inline font-medium text-foreground/80">id</dt>
-                    <dd className="mt-0.5 font-mono break-all">{s.id}</dd>
+            {surveys.map((s) => {
+              const { scheduleLine, highlight, highlightTone } = surveyScheduleContext(s);
+              const highlightClass =
+                highlightTone === "live"
+                  ? "text-emerald-700 dark:text-emerald-300"
+                  : highlightTone === "done"
+                    ? "text-muted-foreground"
+                    : "text-foreground/90";
+              return (
+                <li key={s.id} className="py-5 first:pt-2">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Question</p>
+                      <p className="mt-0.5 text-base font-semibold leading-snug text-foreground">{s.title}</p>
+                    </div>
+                    <span
+                      className={`inline-flex shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadgeClass(s.status)}`}
+                    >
+                      {formatStatusLabel(s.status)}
+                    </span>
                   </div>
-                  <div>
-                    <dt className="inline font-medium text-foreground/80">trip_id</dt>
-                    <dd className="mt-0.5 font-mono break-all">{s.trip_id}</dd>
-                  </div>
-                  <div>
-                    <dt className="inline font-medium text-foreground/80">created_by</dt>
-                    <dd className="mt-0.5 font-mono">{s.created_by}</dd>
-                  </div>
-                  <div>
-                    <dt className="inline font-medium text-foreground/80">created_at</dt>
-                    <dd className="mt-0.5">{formatWhen(s.created_at)}</dd>
-                  </div>
-                  <div>
-                    <dt className="inline font-medium text-foreground/80">updated_at</dt>
-                    <dd className="mt-0.5">{formatWhen(s.updated_at)}</dd>
-                  </div>
-                  <div>
-                    <dt className="inline font-medium text-foreground/80">opens_at</dt>
-                    <dd className="mt-0.5">{formatWhen(s.opens_at)}</dd>
-                  </div>
-                  <div>
-                    <dt className="inline font-medium text-foreground/80">closes_at</dt>
-                    <dd className="mt-0.5">{formatWhen(s.closes_at)}</dd>
-                  </div>
-                </dl>
-
-                <SurveyOptionsPreview options={s.options} />
-              </li>
-            ))}
+                  {s.description?.trim() ? (
+                    <p className="mt-2 text-sm text-muted-foreground">{s.description.trim()}</p>
+                  ) : null}
+                  <p className="mt-3 text-sm text-muted-foreground">{scheduleLine}</p>
+                  {highlight ? (
+                    <p className={`mt-1 text-sm font-medium ${highlightClass}`}>{highlight}</p>
+                  ) : null}
+                  <SurveyChoices options={s.options} />
+                </li>
+              );
+            })}
           </ul>
         ) : null}
       </section>
