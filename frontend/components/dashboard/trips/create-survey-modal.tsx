@@ -23,6 +23,50 @@ type CreateSurveyModalProps = {
 const inputClass =
   "h-10 rounded-lg border border-border/80 bg-background px-3 text-sm outline-none ring-offset-background transition placeholder:text-muted-foreground focus:ring-2 focus:ring-primary";
 
+/** Allow ~1 minute slack so "now" in datetime-local isn't rejected by skew. */
+const OPEN_TIME_SLACK_MS = 60_000;
+
+const HOURS_DEFAULT_WINDOW = 24;
+
+function resolveSurveySchedule(
+  form: SurveyFormFields,
+):
+  | { ok: true; opens_at: string; closes_at: string }
+  | { ok: false; message: string } {
+  const o = form.opensAt?.trim() ?? "";
+  const c = form.closesAt?.trim() ?? "";
+
+  if (!o && !c) {
+    const start = new Date();
+    const end = new Date(start.getTime() + HOURS_DEFAULT_WINDOW * 60 * 60 * 1000);
+    return { ok: true, opens_at: start.toISOString(), closes_at: end.toISOString() };
+  }
+
+  if (!o || !c) {
+    return {
+      ok: false,
+      message:
+        "Set both Opens at and Closes at, or leave both blank. If both are blank, the survey runs from now through 24 hours from now.",
+    };
+  }
+
+  const openMs = new Date(o).getTime();
+  const closeMs = new Date(c).getTime();
+  if (Number.isNaN(openMs) || Number.isNaN(closeMs)) {
+    return { ok: false, message: "Invalid date or time." };
+  }
+
+  const now = Date.now();
+  if (openMs < now - OPEN_TIME_SLACK_MS) {
+    return { ok: false, message: "Opens at must be now or in the future." };
+  }
+  if (closeMs <= openMs) {
+    return { ok: false, message: "Closes at must be strictly after opens at." };
+  }
+
+  return { ok: true, opens_at: new Date(o).toISOString(), closes_at: new Date(c).toISOString() };
+}
+
 /** Prefer JSON `message` / `error` from the Edge Function body over the generic invoke error string. */
 async function messageFromEdgeFunctionFailure(err: unknown, response?: Response): Promise<string> {
   if (response) {
@@ -116,7 +160,12 @@ function buildSurveyOptions(surveyId: string, rows: SurveyOptionDraft[], timesta
     });
 }
 
-function buildSurvey(tripId: string, form: SurveyFormFields, createdBy: string): Survey {
+function buildSurvey(
+  tripId: string,
+  form: SurveyFormFields,
+  createdBy: string,
+  schedule: { opens_at: string; closes_at: string },
+): Survey {
   const now = new Date().toISOString();
   const status: SurveyStatus | null =
     form.status === "" ? null : (form.status as SurveyStatus);
@@ -129,8 +178,8 @@ function buildSurvey(tripId: string, form: SurveyFormFields, createdBy: string):
     created_by: createdBy,
     title: form.title.trim(),
     description: form.description.trim() || null,
-    opens_at: form.opensAt ? new Date(form.opensAt).toISOString() : null,
-    closes_at: form.closesAt ? new Date(form.closesAt).toISOString() : null,
+    opens_at: schedule.opens_at,
+    closes_at: schedule.closes_at,
     status,
     options: buildSurveyOptions(id, form.optionRows, now),
   };
@@ -171,11 +220,27 @@ export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSu
     };
   }, [open, onClose]);
 
-  const rangeError = useMemo(() => {
-    if (!form.opensAt || !form.closesAt) {
-      return false;
+  const scheduleWarnings = useMemo(() => {
+    const o = form.opensAt?.trim() ?? "";
+    const c = form.closesAt?.trim() ?? "";
+    if (!o && !c) {
+      return null;
     }
-    return new Date(form.closesAt) < new Date(form.opensAt);
+    if (!o || !c) {
+      return "Fill both times, or clear both to use the default window (now → 24 hours from now).";
+    }
+    const openMs = new Date(o).getTime();
+    const closeMs = new Date(c).getTime();
+    if (Number.isNaN(openMs) || Number.isNaN(closeMs)) {
+      return null;
+    }
+    if (openMs < Date.now() - OPEN_TIME_SLACK_MS) {
+      return "Opens at should be now or in the future.";
+    }
+    if (closeMs <= openMs) {
+      return "Closes at must be strictly after opens at.";
+    }
+    return null;
   }, [form.closesAt, form.opensAt]);
 
   const addOptionRow = () => {
@@ -211,8 +276,9 @@ export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSu
       return;
     }
 
-    if (rangeError) {
-      setError("Close time cannot be before open time.");
+    const schedule = resolveSurveySchedule(form);
+    if (!schedule.ok) {
+      setError(schedule.message);
       return;
     }
 
@@ -234,7 +300,7 @@ export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSu
       return;
     }
 
-    const survey = buildSurvey(tripId, form, userData.user.id);
+    const survey = buildSurvey(tripId, form, userData.user.id, schedule);
 
     setSubmitting(true);
     try {
@@ -342,25 +408,34 @@ export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSu
             />
           </label>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="grid gap-1">
-              <span className="text-sm font-medium">Opens at (optional)</span>
-              <input
-                type="datetime-local"
-                className={inputClass}
-                value={form.opensAt}
-                onChange={(e) => setForm((p) => ({ ...p, opensAt: e.target.value }))}
-              />
-            </label>
-            <label className="grid gap-1">
-              <span className="text-sm font-medium">Closes at (optional)</span>
-              <input
-                type="datetime-local"
-                className={inputClass}
-                value={form.closesAt}
-                onChange={(e) => setForm((p) => ({ ...p, closesAt: e.target.value }))}
-              />
-            </label>
+          <div className="grid gap-2">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Leave <span className="font-medium text-foreground/90">both</span> times empty to start the survey{" "}
+              <span className="font-medium text-foreground/90">now</span> and close it{" "}
+              <span className="font-medium text-foreground/90">24 hours from now</span>. If you set a schedule, you
+              must fill <span className="font-medium text-foreground/90">both</span> fields: opens at must be now or
+              later, and closes at must be strictly after opens at.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="grid gap-1">
+                <span className="text-sm font-medium">Opens at</span>
+                <input
+                  type="datetime-local"
+                  className={inputClass}
+                  value={form.opensAt}
+                  onChange={(e) => setForm((p) => ({ ...p, opensAt: e.target.value }))}
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-sm font-medium">Closes at</span>
+                <input
+                  type="datetime-local"
+                  className={inputClass}
+                  value={form.closesAt}
+                  onChange={(e) => setForm((p) => ({ ...p, closesAt: e.target.value }))}
+                />
+              </label>
+            </div>
           </div>
 
           <label className="grid gap-1">
@@ -441,9 +516,7 @@ export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSu
               {serverMessage}
             </p>
           ) : null}
-          {rangeError ? (
-            <p className="text-sm text-amber-600">Close time is before open time.</p>
-          ) : null}
+          {scheduleWarnings ? <p className="text-sm text-amber-600">{scheduleWarnings}</p> : null}
 
           <div className="flex flex-wrap gap-2 border-t border-border/60 pt-2">
             <button

@@ -9,6 +9,9 @@ const corsHeaders = {
 
 const SURVEY_STATUSES = new Set(["draft", "ongoing", "closed"])
 
+const OPEN_TIME_SLACK_MS = 60_000
+const HOURS_DEFAULT_WINDOW = 24
+
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
@@ -105,18 +108,59 @@ Deno.serve(async (req) => {
     }
 
     const description = payload.description != null ? String(payload.description).trim() || null : null
-    const opensAt = payload.opens_at?.trim() || null
-    const closesAt = payload.closes_at?.trim() || null
 
-    if (opensAt && closesAt) {
-      const open = new Date(opensAt).getTime()
-      const close = new Date(closesAt).getTime()
-      if (!Number.isNaN(open) && !Number.isNaN(close) && close < open) {
-        return new Response(JSON.stringify({ error: "closes_at cannot be before opens_at." }), {
+    const opensRaw =
+      payload.opens_at != null && String(payload.opens_at).trim() !== ""
+        ? String(payload.opens_at).trim()
+        : null
+    const closesRaw =
+      payload.closes_at != null && String(payload.closes_at).trim() !== ""
+        ? String(payload.closes_at).trim()
+        : null
+
+    let opensAtIso: string
+    let closesAtIso: string
+    const nowMs = Date.now()
+
+    if (!opensRaw && !closesRaw) {
+      const start = new Date()
+      const end = new Date(start.getTime() + HOURS_DEFAULT_WINDOW * 60 * 60 * 1000)
+      opensAtIso = start.toISOString()
+      closesAtIso = end.toISOString()
+    } else if (!opensRaw || !closesRaw) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "Set both opens_at and closes_at, or omit both for a default window from now through 24 hours from now.",
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400,
+        },
+      )
+    } else {
+      const openMs = new Date(opensRaw).getTime()
+      const closeMs = new Date(closesRaw).getTime()
+      if (Number.isNaN(openMs) || Number.isNaN(closeMs)) {
+        return new Response(JSON.stringify({ error: "Invalid opens_at or closes_at." }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
           status: 400,
         })
       }
+      if (openMs < nowMs - OPEN_TIME_SLACK_MS) {
+        return new Response(JSON.stringify({ error: "opens_at must be now or in the future." }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400,
+        })
+      }
+      if (closeMs <= openMs) {
+        return new Response(JSON.stringify({ error: "closes_at must be strictly after opens_at." }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400,
+        })
+      }
+      opensAtIso = new Date(opensRaw).toISOString()
+      closesAtIso = new Date(closesRaw).toISOString()
     }
 
     let status: string | null = null
@@ -192,8 +236,8 @@ Deno.serve(async (req) => {
         created_by: user.id,
         title,
         description,
-        opens_at: opensAt,
-        closes_at: closesAt,
+        opens_at: opensAtIso,
+        closes_at: closesAtIso,
         status,
         updated_at: now,
       })
