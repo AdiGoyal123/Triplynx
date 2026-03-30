@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { CreateSurveyModal } from "./create-survey-modal";
 import type { Survey, SurveyOption } from "./types";
+import { useTripSurveys } from "./use-trip-surveys";
 
 type TripSurveysSectionProps = {
   tripId: string;
@@ -61,12 +62,12 @@ function statusBadgeClass(status: Survey["status"]) {
 }
 
 export function TripSurveysSection({ tripId }: TripSurveysSectionProps) {
-  const [surveys, setSurveys] = useState<Survey[]>([]);
+  const { surveys, loading, error: loadError, refresh } = useTripSurveys(tripId);
   const [createOpen, setCreateOpen] = useState(false);
 
-  const onSurveyCreated = useCallback((survey: Survey) => {
-    setSurveys((prev) => [survey, ...prev]);
-  }, []);
+  const onSurveyCreated = useCallback(() => {
+    void refresh();
+  }, [refresh]);
 
   if (!tripId.trim()) {
     return null;
@@ -79,8 +80,8 @@ export function TripSurveysSection({ tripId }: TripSurveysSectionProps) {
           <div>
             <h2 className="text-lg font-semibold text-foreground">Surveys</h2>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              Surveys are saved with the create-survey Edge Function. This list shows surveys you created in
-              this session; a full trip history can load from the API later.
+              Surveys for this trip load from your database (new surveys are created via the create-survey Edge
+              Function).
             </p>
           </div>
           <button
@@ -92,9 +93,12 @@ export function TripSurveysSection({ tripId }: TripSurveysSectionProps) {
           </button>
         </div>
 
-        {surveys.length === 0 ? (
+        {loadError ? <p className="mt-6 text-sm text-red-500">{loadError}</p> : null}
+        {loading ? (
+          <p className="mt-6 text-sm text-muted-foreground">Loading surveys…</p>
+        ) : !loadError && surveys.length === 0 ? (
           <p className="mt-6 text-sm text-muted-foreground">No surveys yet. Create one to see the structure here.</p>
-        ) : (
+        ) : !loadError ? (
           <ul className="mt-6 divide-y divide-border/60 border-t border-border/60 pt-6">
             {surveys.map((s) => (
               <li key={s.id} className="py-4 first:pt-0">
@@ -144,7 +148,7 @@ export function TripSurveysSection({ tripId }: TripSurveysSectionProps) {
               </li>
             ))}
           </ul>
-        )}
+        ) : null}
       </section>
 
       <CreateSurveyModal
