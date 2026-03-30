@@ -13,11 +13,17 @@ import {
   type SurveyStatus,
 } from "./types";
 
+export type CreateSurveyWhatsappSummary = {
+  members_with_phone: number;
+  sent: number;
+  failed: Array<{ phone: string; error?: string }>;
+};
+
 type CreateSurveyModalProps = {
   tripId: string;
   open: boolean;
   onClose: () => void;
-  onCreated?: (survey: Survey) => void;
+  onCreated?: (survey: Survey, meta?: { whatsapp_notifications?: CreateSurveyWhatsappSummary }) => void;
 };
 
 const inputClass =
@@ -337,7 +343,26 @@ export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSu
       if (data && typeof data === "object" && "survey" in data) {
         const saved = surveyFromCreateResponse(data.survey);
         if (saved) {
-          onCreated?.(saved);
+          const rawWhatsapp =
+            data && typeof data === "object" && "whatsapp_notifications" in data
+              ? (data as { whatsapp_notifications?: unknown }).whatsapp_notifications
+              : undefined;
+          let whatsappMeta: CreateSurveyWhatsappSummary | undefined;
+          if (
+            rawWhatsapp &&
+            typeof rawWhatsapp === "object" &&
+            "members_with_phone" in rawWhatsapp &&
+            "sent" in rawWhatsapp &&
+            Array.isArray((rawWhatsapp as { failed?: unknown }).failed)
+          ) {
+            const w = rawWhatsapp as CreateSurveyWhatsappSummary;
+            whatsappMeta = {
+              members_with_phone: w.members_with_phone,
+              sent: w.sent,
+              failed: w.failed,
+            };
+          }
+          onCreated?.(saved, whatsappMeta ? { whatsapp_notifications: whatsappMeta } : undefined);
           setForm(initialSurveyForm);
           setServerMessage(null);
           onClose();

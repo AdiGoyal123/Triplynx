@@ -9,7 +9,7 @@ import {
   MessageSquareText,
   Plus,
 } from "lucide-react";
-import { CreateSurveyModal } from "./create-survey-modal";
+import { CreateSurveyModal, type CreateSurveyWhatsappSummary } from "./create-survey-modal";
 import type { Survey, SurveyOption } from "./types";
 import { useTripSurveys } from "./use-trip-surveys";
 
@@ -168,10 +168,26 @@ function statusBadgeClass(status: Survey["status"]) {
 export function TripSurveysSection({ tripId }: TripSurveysSectionProps) {
   const { surveys, loading, error: loadError, refresh } = useTripSurveys(tripId);
   const [createOpen, setCreateOpen] = useState(false);
+  const [whatsappBanner, setWhatsappBanner] = useState<string | null>(null);
 
-  const onSurveyCreated = useCallback(() => {
-    void refresh();
-  }, [refresh]);
+  const onSurveyCreated = useCallback(
+    (_survey: Survey, meta?: { whatsapp_notifications?: CreateSurveyWhatsappSummary }) => {
+      void refresh();
+      const w = meta?.whatsapp_notifications;
+      if (!w || w.members_with_phone <= 0) {
+        return;
+      }
+      if (w.failed.length === 0) {
+        setWhatsappBanner(`WhatsApp survey notice sent to ${w.sent} member(s) with a phone on file.`);
+      } else {
+        setWhatsappBanner(
+          `Survey saved. WhatsApp: ${w.sent} sent, ${w.failed.length} failed (check Twilio / sandbox opt-in).`,
+        );
+      }
+      window.setTimeout(() => setWhatsappBanner(null), 12_000);
+    },
+    [refresh],
+  );
 
   if (!tripId.trim()) {
     return null;
@@ -208,6 +224,14 @@ export function TripSurveysSection({ tripId }: TripSurveysSectionProps) {
         </div>
 
         <div className="p-4 sm:p-6 sm:pt-5">
+          {whatsappBanner ? (
+            <p
+              className="mb-4 rounded-lg border border-border/80 bg-muted/50 px-3 py-2 text-sm text-foreground"
+              role="status"
+            >
+              {whatsappBanner}
+            </p>
+          ) : null}
           {loadError ? (
             <p className="text-sm text-red-600 dark:text-red-400">{loadError}</p>
           ) : null}

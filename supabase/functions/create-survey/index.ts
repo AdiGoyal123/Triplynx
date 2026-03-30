@@ -8,8 +8,6 @@ const corsHeaders = {
 }
 
 const OPEN_TIME_SLACK_MS = 60_000
-
-const OPEN_TIME_SLACK_MS = 60_000
 const HOURS_DEFAULT_WINDOW = 24
 
 function isUuid(value: string) {
@@ -30,6 +28,98 @@ type CreateSurveyBody = {
   closes_at?: string | null
   status?: string | null
   options?: SurveyOptionPayload[]
+}
+
+/** Strip to E.164 digits with leading + (8–15 digits after country code). */
+function normalizeToE164(raw: string): string | null {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  const noSpaces = trimmed.replace(/\s/g, "")
+  const digitsOnly = noSpaces.startsWith("+")
+    ? "+" + noSpaces.slice(1).replace(/\D/g, "")
+    : "+" + noSpaces.replace(/\D/g, "")
+  const afterPlus = digitsOnly.slice(1)
+  if (afterPlus.length < 8 || afterPlus.length > 15) return null
+  return digitsOnly
+}
+
+function whatsappAddress(e164: string): string {
+  return e164.startsWith("whatsapp:") ? e164 : `whatsapp:${e164}`
+}
+
+function labelForUser(user: {
+  email?: string | null
+  user_metadata?: Record<string, unknown> | null
+}): string {
+  const meta = user.user_metadata ?? {}
+  for (const key of ["full_name", "name", "display_name"] as const) {
+    const v = meta[key]
+    if (typeof v === "string" && v.trim()) return v.trim()
+  }
+  if (user.email?.trim()) return user.email.trim()
+  return "Someone"
+}
+
+function formatClosesForMessage(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    })
+  } catch {
+    return iso
+  }
+}
+
+async function sendWhatsappSurveyNotice(opts: {
+  accountSid: string
+  authToken: string
+  fromRaw: string
+  toE164: string
+  tripTitle: string | null
+  surveyTitle: string
+  closesAtIso: string
+  organizerLabel: string
+  tripId: string
+  appPublicUrl: string | null
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const from = whatsappAddress(
+    opts.fromRaw.startsWith("whatsapp:") ? opts.fromRaw : normalizeToE164(opts.fromRaw) ?? opts.fromRaw,
+  )
+  const to = whatsappAddress(opts.toE164)
+
+  const tripPart = opts.tripTitle?.trim() ? `"${opts.tripTitle.trim()}"` : "your trip"
+  const by = opts.organizerLabel.trim() || "Someone"
+  const closes = formatClosesForMessage(opts.closesAtIso)
+  const base = opts.appPublicUrl?.replace(/\/$/, "") ?? ""
+  const linkLine = base
+    ? `Open Triplynx to vote: ${base}/dashboard/trips/${opts.tripId}`
+    : "Open the Triplynx app to view this trip and respond to the survey."
+
+  const body = [
+    `New survey on Triplynx for ${tripPart}: "${opts.surveyTitle.trim()}"`,
+    `Shared by ${by}. Please respond by ${closes}.`,
+    linkLine,
+  ].join("\n\n")
+
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${opts.accountSid}/Messages.json`
+  const credentials = btoa(`${opts.accountSid}:${opts.authToken}`)
+  const params = new URLSearchParams({ To: to, From: from, Body: body })
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: params.toString(),
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    return { ok: false, error: text || `${res.status} ${res.statusText}` }
+  }
+  return { ok: true }
 }
 
 Deno.serve(async (req) => {
@@ -120,7 +210,7 @@ Deno.serve(async (req) => {
 
     let opensAtIso: string
     let closesAtIso: string
-    const nowMs = Date.now()
+    const scheduleEvalNowMs = Date.now()
 
     if (!opensRaw && !closesRaw) {
       const start = new Date()
@@ -147,7 +237,7 @@ Deno.serve(async (req) => {
           status: 400,
         })
       }
-      if (openMs < nowMs - OPEN_TIME_SLACK_MS) {
+      if (openMs < scheduleEvalNowMs - OPEN_TIME_SLACK_MS) {
         return new Response(JSON.stringify({ error: "opens_at must be now or in the future." }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
           status: 400,
@@ -163,10 +253,12 @@ Deno.serve(async (req) => {
       closesAtIso = new Date(closesRaw).toISOString()
     }
 
-    const openMs = new Date(opensAtIso).getTime()
-    const nowMs = Date.now()
+    const openMsForStatus = new Date(opensAtIso).getTime()
+    const statusNowMs = Date.now()
     const status =
-      !Number.isNaN(openMs) && openMs <= nowMs + OPEN_TIME_SLACK_MS ? "ongoing" : "scheduled"
+      !Number.isNaN(openMsForStatus) && openMsForStatus <= statusNowMs + OPEN_TIME_SLACK_MS
+        ? "ongoing"
+        : "scheduled"
 
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false },
@@ -174,7 +266,7 @@ Deno.serve(async (req) => {
 
     const { data: trip, error: tripError } = await supabaseAdmin
       .from("trips")
-      .select("id, created_by")
+      .select("id, created_by, title")
       .eq("id", tripId)
       .maybeSingle()
 
@@ -266,10 +358,68 @@ Deno.serve(async (req) => {
       optionsRows = insertedOptions ?? []
     }
 
+    type WhatsappMemberResult = { phone: string; sent: boolean; error?: string }
+    const whatsappToMembers: WhatsappMemberResult[] = []
+
+    const { data: memberRows, error: membersError } = await supabaseAdmin
+      .from("trip_members")
+      .select("phone")
+      .eq("trip_id", tripId)
+
+    if (!membersError && memberRows?.length) {
+      const accountSid = Deno.env.get("TWILIO_ACCOUNT_SID")?.trim()
+      const authToken = Deno.env.get("TWILIO_AUTH_TOKEN")?.trim()
+      const fromRaw = Deno.env.get("TWILIO_WHATSAPP_FROM")?.trim()
+      const appPublicUrl = Deno.env.get("APP_PUBLIC_URL")?.trim() || null
+      const organizerLabel = labelForUser(user)
+
+      const seenE164 = new Set<string>()
+      for (const row of memberRows) {
+        const rawPhone = row.phone != null ? String(row.phone) : ""
+        if (!rawPhone.trim()) continue
+        const toE164 = normalizeToE164(rawPhone)
+        if (!toE164 || seenE164.has(toE164)) continue
+        seenE164.add(toE164)
+
+        if (!accountSid || !authToken || !fromRaw) {
+          whatsappToMembers.push({
+            phone: toE164,
+            sent: false,
+            error: "Missing TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, or TWILIO_WHATSAPP_FROM.",
+          })
+          continue
+        }
+
+        const result = await sendWhatsappSurveyNotice({
+          accountSid,
+          authToken,
+          fromRaw,
+          toE164,
+          tripTitle: trip?.title ?? null,
+          surveyTitle: title,
+          closesAtIso: closesAtIso,
+          organizerLabel,
+          tripId,
+          appPublicUrl,
+        })
+
+        whatsappToMembers.push(
+          result.ok ? { phone: toE164, sent: true } : { phone: toE164, sent: false, error: result.error },
+        )
+      }
+    }
+
+    const whatsapp_summary = {
+      members_with_phone: whatsappToMembers.length,
+      sent: whatsappToMembers.filter((r) => r.sent).length,
+      failed: whatsappToMembers.filter((r) => !r.sent),
+    }
+
     return new Response(
       JSON.stringify({
         message: "Survey created.",
         survey: { ...surveyRow, options: optionsRows },
+        whatsapp_notifications: whatsapp_summary,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
