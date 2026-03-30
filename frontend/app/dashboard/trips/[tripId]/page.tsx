@@ -5,7 +5,6 @@ import { useCallback, useState } from "react";
 import { useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { PageIntro } from "@/components/dashboard/PageIntro";
-import { AddTripMemberFab } from "@/components/dashboard/trips/add-trip-member-fab";
 import { AddTripMemberModal } from "@/components/dashboard/trips/add-trip-member-modal";
 import { TripParticipantsPanel } from "@/components/dashboard/trips/trip-participants-panel";
 import { TripSurveysSection } from "@/components/dashboard/trips/trip-surveys-section";
@@ -44,7 +43,7 @@ export default function TripDetailPage() {
       : "This trip could not be found in your list. It may have been removed or the link is invalid.";
 
   return (
-    <div className="relative space-y-6 pb-28">
+    <div className="relative space-y-6 pb-6">
       <Link
         href="/dashboard/trips"
         className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
@@ -55,20 +54,21 @@ export default function TripDetailPage() {
 
       <PageIntro title={title} description={description} />
 
-      <TripParticipantsPanel tripId={tripId} reloadSignal={membersReload} />
+      <TripParticipantsPanel
+        tripId={tripId}
+        reloadSignal={membersReload}
+        onAddMember={tripId.trim() ? () => setAddMemberOpen(true) : undefined}
+      />
 
       <TripSurveysSection tripId={tripId} />
 
       {tripId.trim() ? (
-        <>
-          <AddTripMemberFab onClick={() => setAddMemberOpen(true)} />
-          <AddTripMemberModal
-            tripId={tripId}
-            open={addMemberOpen}
-            onClose={closeAddMember}
-            onAdded={onMemberAdded}
-          />
-        </>
+        <AddTripMemberModal
+          tripId={tripId}
+          open={addMemberOpen}
+          onClose={closeAddMember}
+          onAdded={onMemberAdded}
+        />
       ) : null}
     </div>
   );
