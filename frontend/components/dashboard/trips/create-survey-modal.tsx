@@ -5,6 +5,7 @@ import { Plus, Trash2, X } from "lucide-react";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import {
   initialSurveyForm,
+  MAX_SURVEY_OPTIONS,
   newSurveyOptionDraft,
   type Survey,
   type SurveyFormFields,
@@ -263,7 +264,10 @@ export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSu
   }, [form.closesAt, form.opensAt]);
 
   const addOptionRow = () => {
-    setForm((p) => ({ ...p, optionRows: [...p.optionRows, newSurveyOptionDraft()] }));
+    setForm((p) => {
+      if (p.optionRows.length >= MAX_SURVEY_OPTIONS) return p;
+      return { ...p, optionRows: [...p.optionRows, newSurveyOptionDraft()] };
+    });
   };
 
   const removeOptionRow = (clientKey: string) => {
@@ -292,6 +296,12 @@ export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSu
 
     if (!form.title.trim()) {
       setError("Title is required.");
+      return;
+    }
+
+    const filledOptionCount = form.optionRows.filter((r) => r.text.trim()).length;
+    if (filledOptionCount > MAX_SURVEY_OPTIONS) {
+      setError(`You can add at most ${MAX_SURVEY_OPTIONS} options.`);
       return;
     }
 
@@ -487,13 +497,14 @@ export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSu
               <div>
                 <p className="text-sm font-medium text-foreground">Options (optional)</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Choices voters can pick. Empty rows are ignored.
+                  Up to {MAX_SURVEY_OPTIONS} choices. Empty rows are ignored.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={addOptionRow}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3 text-sm font-medium transition hover:bg-muted"
+                disabled={form.optionRows.length >= MAX_SURVEY_OPTIONS}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3 text-sm font-medium transition hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
               >
                 <Plus className="h-4 w-4" aria-hidden />
                 Add option

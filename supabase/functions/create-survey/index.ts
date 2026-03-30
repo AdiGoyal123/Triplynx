@@ -9,6 +9,7 @@ const corsHeaders = {
 
 const OPEN_TIME_SLACK_MS = 60_000
 const HOURS_DEFAULT_WINDOW = 24
+const SURVEY_OPTIONS_MAX = 10
 
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
@@ -71,6 +72,55 @@ function formatClosesForMessage(iso: string): string {
   }
 }
 
+/** One line per option for WhatsApp (label, or value, or both if they differ). */
+function linesFromSurveyOptionRows(rows: Array<Record<string, unknown>>): string[] {
+  const lines: string[] = []
+  for (const row of rows) {
+    const label = row.label != null ? String(row.label).trim() : ""
+    const value = row.value != null ? String(row.value).trim() : ""
+    if (!label && !value) continue
+    const line = label && value && label !== value ? `${label} (${value})` : label || value
+    lines.push(line)
+  }
+  return lines
+}
+
+const WHATSAPP_BODY_MAX_CHARS = 3500
+const WHATSAPP_OPTIONS_MAX_LINES = SURVEY_OPTIONS_MAX
+
+function buildWhatsappSurveyBody(opts: {
+  tripPart: string
+  surveyTitle: string
+  by: string
+  closes: string
+  linkLine: string
+  optionLines: string[]
+}): string {
+  const headerBlocks = [
+    `New survey on Triplynx for ${opts.tripPart}: "${opts.surveyTitle.trim()}"`,
+    `Shared by ${opts.by}. Please respond by ${opts.closes}.`,
+  ]
+
+  let optionBlock = ""
+  if (opts.optionLines.length > 0) {
+    const cap = opts.optionLines.slice(0, WHATSAPP_OPTIONS_MAX_LINES)
+    const numbered = cap.map((line, i) => `${i + 1}. ${line}`)
+    const overflow = opts.optionLines.length - cap.length
+    const suffix = overflow > 0 ? `\n…+${overflow} more in Triplynx.` : ""
+    optionBlock = ["Options:", ...numbered].join("\n") + suffix
+  }
+
+  const parts = [...headerBlocks]
+  if (optionBlock) parts.push(optionBlock)
+  parts.push(opts.linkLine)
+
+  let body = parts.join("\n\n")
+  if (body.length > WHATSAPP_BODY_MAX_CHARS) {
+    body = body.slice(0, WHATSAPP_BODY_MAX_CHARS - 1).trimEnd() + "…"
+  }
+  return body
+}
+
 async function sendWhatsappSurveyNotice(opts: {
   accountSid: string
   authToken: string
@@ -82,6 +132,7 @@ async function sendWhatsappSurveyNotice(opts: {
   organizerLabel: string
   tripId: string
   appPublicUrl: string | null
+  optionLines: string[]
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const from = whatsappAddress(
     opts.fromRaw.startsWith("whatsapp:") ? opts.fromRaw : normalizeToE164(opts.fromRaw) ?? opts.fromRaw,
@@ -96,11 +147,14 @@ async function sendWhatsappSurveyNotice(opts: {
     ? `Open Triplynx to vote: ${base}/dashboard/trips/${opts.tripId}`
     : "Open the Triplynx app to view this trip and respond to the survey."
 
-  const body = [
-    `New survey on Triplynx for ${tripPart}: "${opts.surveyTitle.trim()}"`,
-    `Shared by ${by}. Please respond by ${closes}.`,
+  const body = buildWhatsappSurveyBody({
+    tripPart,
+    surveyTitle: opts.surveyTitle,
+    by,
+    closes,
     linkLine,
-  ].join("\n\n")
+    optionLines: opts.optionLines,
+  })
 
   const url = `https://api.twilio.com/2010-04-01/Accounts/${opts.accountSid}/Messages.json`
   const credentials = btoa(`${opts.accountSid}:${opts.authToken}`)
@@ -306,6 +360,18 @@ Deno.serve(async (req) => {
       })
       .filter((o): o is NonNullable<typeof o> => o !== null)
 
+    if (normalizedOptions.length > SURVEY_OPTIONS_MAX) {
+      return new Response(
+        JSON.stringify({
+          error: `A survey can have at most ${SURVEY_OPTIONS_MAX} options.`,
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400,
+        },
+      )
+    }
+
     const surveyId = crypto.randomUUID()
     const now = new Date().toISOString()
 
@@ -372,6 +438,7 @@ Deno.serve(async (req) => {
       const fromRaw = Deno.env.get("TWILIO_WHATSAPP_FROM")?.trim()
       const appPublicUrl = Deno.env.get("APP_PUBLIC_URL")?.trim() || null
       const organizerLabel = labelForUser(user)
+      const optionLines = linesFromSurveyOptionRows(optionsRows)
 
       const seenE164 = new Set<string>()
       for (const row of memberRows) {
@@ -401,6 +468,7 @@ Deno.serve(async (req) => {
           organizerLabel,
           tripId,
           appPublicUrl,
+          optionLines,
         })
 
         whatsappToMembers.push(

@@ -59,6 +59,9 @@ export type Survey = {
   options: SurveyOption[];
 };
 
+/** Hard cap on choices when creating a survey (matches Edge Function validation). */
+export const MAX_SURVEY_OPTIONS = 10;
+
 /** One editable “option” row in the create-survey form (what voters will choose). */
 export type SurveyOptionDraft = {
   clientKey: string;
