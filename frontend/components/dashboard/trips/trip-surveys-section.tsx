@@ -1,6 +1,14 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import {
+  CalendarRange,
+  ClipboardList,
+  Clock,
+  ListChecks,
+  MessageSquareText,
+  Plus,
+} from "lucide-react";
 import { CreateSurveyModal } from "./create-survey-modal";
 import type { Survey, SurveyOption } from "./types";
 import { useTripSurveys } from "./use-trip-surveys";
@@ -52,7 +60,8 @@ function formatDurationRough(ms: number): string {
 function surveyScheduleContext(s: Survey): {
   scheduleLine: string;
   highlight: string | null;
-  highlightTone: "muted" | "live" | "done";
+  subHighlight: string | null;
+  highlightTone: "muted" | "live" | "done" | "draftWindow";
 } {
   const now = Date.now();
   const openMs = parseIsoMs(s.opens_at);
@@ -60,31 +69,44 @@ function surveyScheduleContext(s: Survey): {
 
   if (openMs === null || closeMs === null) {
     return {
-      scheduleLine: "Schedule not available.",
+      scheduleLine: "No voting window set for this survey yet.",
       highlight: null,
+      subHighlight: null,
       highlightTone: "muted",
     };
   }
 
   if (now < openMs) {
     return {
-      scheduleLine: `Opens ${formatWhen(s.opens_at)} · Closes ${formatWhen(s.closes_at)}`,
-      highlight: `Opens in ${formatDurationRough(openMs - now)}`,
+      scheduleLine: `Starts ${formatWhen(s.opens_at)} · Ends ${formatWhen(s.closes_at)}`,
+      highlight: `Starting in ${formatDurationRough(openMs - now)}`,
+      subHighlight: null,
       highlightTone: "muted",
     };
   }
 
   if (now >= closeMs) {
     return {
-      scheduleLine: `Voting was open ${formatWhen(s.opens_at)} – ${formatWhen(s.closes_at)}`,
-      highlight: "Voting has ended",
+      scheduleLine: `Window was ${formatWhen(s.opens_at)} – ${formatWhen(s.closes_at)}`,
+      highlight: "This survey has ended",
+      subHighlight: null,
       highlightTone: "done",
     };
   }
 
+  if (s.status === "draft") {
+    return {
+      scheduleLine: `Scheduled ${formatWhen(s.opens_at)} – ${formatWhen(s.closes_at)}`,
+      highlight: "Draft — not collecting responses yet",
+      subHighlight: `Would close in ${formatDurationRough(closeMs - now)} if published as Ongoing`,
+      highlightTone: "draftWindow",
+    };
+  }
+
   return {
-    scheduleLine: `Voting open ${formatWhen(s.opens_at)} – ${formatWhen(s.closes_at)}`,
+    scheduleLine: `Live ${formatWhen(s.opens_at)} – ${formatWhen(s.closes_at)}`,
     highlight: `${formatDurationRough(closeMs - now)} left to respond`,
+    subHighlight: null,
     highlightTone: "live",
   };
 }
@@ -98,14 +120,29 @@ function formatStatusLabel(status: Survey["status"]): string {
 
 function SurveyChoices({ options }: { options: SurveyOption[] }) {
   if (options.length === 0) {
-    return <p className="mt-3 text-sm text-muted-foreground">No answer choices listed yet.</p>;
+    return (
+      <div className="mt-4 rounded-lg border border-dashed border-border/80 bg-muted/20 px-4 py-3 text-center sm:text-left">
+        <p className="text-sm text-muted-foreground">No answer choices yet — edit the survey to add options.</p>
+      </div>
+    );
   }
   return (
-    <div className="mt-3">
-      <p className="text-xs font-medium text-muted-foreground">Choices</p>
-      <ul className="mt-1.5 list-inside list-disc space-y-1 text-sm text-foreground">
-        {options.map((o) => (
-          <li key={o.id}>{o.label ?? o.value ?? "—"}</li>
+    <div className="mt-4 rounded-lg border border-border/60 bg-muted/25 px-4 py-3">
+      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+        <ListChecks className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+        <span>Answer choices</span>
+      </div>
+      <ul className="mt-2.5 space-y-2">
+        {options.map((o, i) => (
+          <li
+            key={o.id}
+            className="flex gap-2.5 text-sm leading-snug text-foreground"
+          >
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-background text-[10px] font-semibold text-muted-foreground ring-1 ring-border/80">
+              {i + 1}
+            </span>
+            <span className="min-w-0 pt-0.5">{o.label ?? o.value ?? "—"}</span>
+          </li>
         ))}
       </ul>
     </div>
@@ -139,66 +176,122 @@ export function TripSurveysSection({ tripId }: TripSurveysSectionProps) {
 
   return (
     <>
-      <section className="rounded-2xl border border-border/70 bg-background p-4 sm:p-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Surveys</h2>
-            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              Ask the group a question, set voting times, and see how long participants have left to respond.
-            </p>
+      <section className="overflow-hidden rounded-2xl border border-border/70 bg-background shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.06]">
+        <div className="border-b border-border/50 bg-gradient-to-b from-muted/40 to-transparent px-4 py-5 sm:px-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex gap-3.5">
+              <div
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-inner"
+                aria-hidden
+              >
+                <MessageSquareText className="h-5 w-5" strokeWidth={1.75} />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold tracking-tight text-foreground">Surveys</h2>
+                <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted-foreground">
+                  Run quick polls with clear windows — participants see when voting closes.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground shadow-md shadow-primary/20 transition hover:opacity-[0.92] active:scale-[0.98]"
+            >
+              <Plus className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+              New survey
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setCreateOpen(true)}
-            className="inline-flex h-10 shrink-0 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:opacity-90"
-          >
-            Create survey
-          </button>
         </div>
 
-        {loadError ? <p className="mt-6 text-sm text-red-500">{loadError}</p> : null}
-        {loading ? (
-          <p className="mt-6 text-sm text-muted-foreground">Loading surveys…</p>
-        ) : !loadError && surveys.length === 0 ? (
-          <p className="mt-6 text-sm text-muted-foreground">
-            No surveys yet. Create one to collect votes from the group.
-          </p>
-        ) : !loadError ? (
-          <ul className="mt-6 divide-y divide-border/60 border-t border-border/60 pt-6">
-            {surveys.map((s) => {
-              const { scheduleLine, highlight, highlightTone } = surveyScheduleContext(s);
-              const highlightClass =
-                highlightTone === "live"
-                  ? "text-emerald-700 dark:text-emerald-300"
-                  : highlightTone === "done"
-                    ? "text-muted-foreground"
-                    : "text-foreground/90";
-              return (
-                <li key={s.id} className="py-5 first:pt-2">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Question</p>
-                      <p className="mt-0.5 text-base font-semibold leading-snug text-foreground">{s.title}</p>
+        <div className="p-4 sm:p-6 sm:pt-5">
+          {loadError ? (
+            <p className="text-sm text-red-600 dark:text-red-400">{loadError}</p>
+          ) : null}
+          {loading ? (
+            <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+              <span
+                className="inline-block size-4 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-primary"
+                aria-hidden
+              />
+              Loading surveys…
+            </div>
+          ) : !loadError && surveys.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border/80 bg-muted/15 px-6 py-10 text-center">
+              <ClipboardList className="mx-auto h-10 w-10 text-muted-foreground/50" strokeWidth={1.25} aria-hidden />
+              <p className="mt-3 text-sm font-medium text-foreground">No surveys on this trip yet</p>
+              <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+                Create a survey to ask where to eat, when to meet, or anything the group should vote on.
+              </p>
+            </div>
+          ) : !loadError ? (
+            <ul className="grid gap-4">
+              {surveys.map((s) => {
+                const { scheduleLine, highlight, subHighlight, highlightTone } = surveyScheduleContext(s);
+                const highlightClass =
+                  highlightTone === "live"
+                    ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-900 dark:text-emerald-100"
+                    : highlightTone === "draftWindow"
+                      ? "border-amber-500/25 bg-amber-500/10 text-amber-950 dark:text-amber-50"
+                      : highlightTone === "done"
+                        ? "border-border/80 bg-muted/40 text-muted-foreground"
+                        : "border-border/80 bg-muted/30 text-foreground";
+
+                return (
+                  <li
+                    key={s.id}
+                    className="group rounded-xl border border-border/70 bg-card/30 p-4 shadow-sm transition hover:border-border hover:shadow-md sm:p-5"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Question
+                        </p>
+                        <p className="mt-1 text-lg font-semibold leading-snug tracking-tight text-foreground">
+                          {s.title}
+                        </p>
+                      </div>
+                      <span
+                        className={`inline-flex shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${statusBadgeClass(s.status)}`}
+                      >
+                        {formatStatusLabel(s.status)}
+                      </span>
                     </div>
-                    <span
-                      className={`inline-flex shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadgeClass(s.status)}`}
-                    >
-                      {formatStatusLabel(s.status)}
-                    </span>
-                  </div>
-                  {s.description?.trim() ? (
-                    <p className="mt-2 text-sm text-muted-foreground">{s.description.trim()}</p>
-                  ) : null}
-                  <p className="mt-3 text-sm text-muted-foreground">{scheduleLine}</p>
-                  {highlight ? (
-                    <p className={`mt-1 text-sm font-medium ${highlightClass}`}>{highlight}</p>
-                  ) : null}
-                  <SurveyChoices options={s.options} />
-                </li>
-              );
-            })}
-          </ul>
-        ) : null}
+                    {s.description?.trim() ? (
+                      <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">{s.description.trim()}</p>
+                    ) : null}
+
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-4">
+                      <div className="flex min-w-0 flex-1 gap-2.5 text-sm text-muted-foreground">
+                        <CalendarRange
+                          className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground/70"
+                          strokeWidth={1.75}
+                          aria-hidden
+                        />
+                        <p className="leading-relaxed">{scheduleLine}</p>
+                      </div>
+                      {highlight ? (
+                        <div
+                          className={`flex shrink-0 flex-col gap-1 rounded-lg border px-3 py-2.5 text-sm font-medium sm:max-w-[min(100%,280px)] ${highlightClass}`}
+                        >
+                          <span className="flex items-center gap-2">
+                            <Clock className="h-3.5 w-3.5 shrink-0 opacity-80" strokeWidth={2} aria-hidden />
+                            {highlight}
+                          </span>
+                          {subHighlight ? (
+                            <span className="pl-5 text-xs font-normal opacity-90">{subHighlight}</span>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <SurveyChoices options={s.options} />
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+        </div>
       </section>
 
       <CreateSurveyModal
