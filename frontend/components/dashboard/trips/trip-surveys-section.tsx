@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { CreateSurveyModal } from "./create-survey-modal";
 import type { Survey, SurveyOption } from "./types";
 
@@ -61,8 +61,12 @@ function statusBadgeClass(status: Survey["status"]) {
 }
 
 export function TripSurveysSection({ tripId }: TripSurveysSectionProps) {
-  const [surveys] = useState<Survey[]>([]);
+  const [surveys, setSurveys] = useState<Survey[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
+
+  const onSurveyCreated = useCallback((survey: Survey) => {
+    setSurveys((prev) => [survey, ...prev]);
+  }, []);
 
   if (!tripId.trim()) {
     return null;
@@ -75,8 +79,8 @@ export function TripSurveysSection({ tripId }: TripSurveysSectionProps) {
           <div>
             <h2 className="text-lg font-semibold text-foreground">Surveys</h2>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              Creating a survey calls the create-survey Edge Function on Supabase. Listed surveys will appear
-              here once they are saved and loaded from the database.
+              Surveys are saved with the create-survey Edge Function. This list shows surveys you created in
+              this session; a full trip history can load from the API later.
             </p>
           </div>
           <button
@@ -143,7 +147,12 @@ export function TripSurveysSection({ tripId }: TripSurveysSectionProps) {
         )}
       </section>
 
-      <CreateSurveyModal tripId={tripId} open={createOpen} onClose={() => setCreateOpen(false)} />
+      <CreateSurveyModal
+        tripId={tripId}
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={onSurveyCreated}
+      />
     </>
   );
 }

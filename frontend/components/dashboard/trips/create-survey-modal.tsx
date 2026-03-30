@@ -13,12 +13,11 @@ import {
   type SurveyStatus,
 } from "./types";
 
-const PLACEHOLDER_CREATED_BY = "00000000-0000-0000-0000-000000000000";
-
 type CreateSurveyModalProps = {
   tripId: string;
   open: boolean;
   onClose: () => void;
+  onCreated?: (survey: Survey) => void;
 };
 
 const inputClass =
@@ -56,6 +55,50 @@ async function messageFromEdgeFunctionFailure(err: unknown, response?: Response)
   return "Request failed.";
 }
 
+function surveyOptionFromApi(row: unknown): SurveyOption {
+  const r = row as Record<string, unknown>;
+  const meta = r.metadata;
+  return {
+    id: String(r.id),
+    created_at: String(r.created_at),
+    survey_id: String(r.survey_id),
+    label: r.label != null ? String(r.label) : null,
+    value: r.value != null ? String(r.value) : null,
+    metadata:
+      meta && typeof meta === "object" && !Array.isArray(meta)
+        ? (meta as Record<string, unknown>)
+        : {},
+    updated_at: r.updated_at != null ? String(r.updated_at) : null,
+  };
+}
+
+function surveyFromCreateResponse(raw: unknown): Survey | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  const s = raw as Record<string, unknown>;
+  if (typeof s.id !== "string" || typeof s.trip_id !== "string") {
+    return null;
+  }
+  const optionsRaw = Array.isArray(s.options) ? s.options : [];
+  const statusVal = s.status;
+  const status: SurveyStatus | null =
+    statusVal === "draft" || statusVal === "ongoing" || statusVal === "closed" ? statusVal : null;
+  return {
+    id: s.id,
+    created_at: String(s.created_at),
+    updated_at: String(s.updated_at),
+    trip_id: s.trip_id,
+    created_by: String(s.created_by),
+    title: String(s.title),
+    description: s.description != null ? String(s.description) : null,
+    opens_at: s.opens_at != null ? String(s.opens_at) : null,
+    closes_at: s.closes_at != null ? String(s.closes_at) : null,
+    status,
+    options: optionsRaw.map(surveyOptionFromApi),
+  };
+}
+
 function buildSurveyOptions(surveyId: string, rows: SurveyOptionDraft[], timestamp: string): SurveyOption[] {
   return rows
     .filter((r) => r.text.trim())
@@ -73,7 +116,7 @@ function buildSurveyOptions(surveyId: string, rows: SurveyOptionDraft[], timesta
     });
 }
 
-function buildSurvey(tripId: string, form: SurveyFormFields): Survey {
+function buildSurvey(tripId: string, form: SurveyFormFields, createdBy: string): Survey {
   const now = new Date().toISOString();
   const status: SurveyStatus | null =
     form.status === "" ? null : (form.status as SurveyStatus);
@@ -83,7 +126,7 @@ function buildSurvey(tripId: string, form: SurveyFormFields): Survey {
     created_at: now,
     updated_at: now,
     trip_id: tripId,
-    created_by: PLACEHOLDER_CREATED_BY,
+    created_by: createdBy,
     title: form.title.trim(),
     description: form.description.trim() || null,
     opens_at: form.opensAt ? new Date(form.opensAt).toISOString() : null,
@@ -93,7 +136,7 @@ function buildSurvey(tripId: string, form: SurveyFormFields): Survey {
   };
 }
 
-export function CreateSurveyModal({ tripId, open, onClose }: CreateSurveyModalProps) {
+export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSurveyModalProps) {
   const [form, setForm] = useState<SurveyFormFields>(initialSurveyForm);
   const [error, setError] = useState<string | null>(null);
   const [serverMessage, setServerMessage] = useState<string | null>(null);
@@ -173,8 +216,6 @@ export function CreateSurveyModal({ tripId, open, onClose }: CreateSurveyModalPr
       return;
     }
 
-    const survey = buildSurvey(tripId, form);
-
     const supabase = getSupabaseClient();
     if (!supabase) {
       setError(
@@ -193,6 +234,8 @@ export function CreateSurveyModal({ tripId, open, onClose }: CreateSurveyModalPr
       return;
     }
 
+    const survey = buildSurvey(tripId, form, userData.user.id);
+
     setSubmitting(true);
     try {
       const { data, error: invokeError, response: fnResponse } = await supabase.functions.invoke(
@@ -210,6 +253,17 @@ export function CreateSurveyModal({ tripId, open, onClose }: CreateSurveyModalPr
       if (data && typeof data === "object" && "error" in data && data.error) {
         setError(String(data.error));
         return;
+      }
+
+      if (data && typeof data === "object" && "survey" in data) {
+        const saved = surveyFromCreateResponse(data.survey);
+        if (saved) {
+          onCreated?.(saved);
+          setForm(initialSurveyForm);
+          setServerMessage(null);
+          onClose();
+          return;
+        }
       }
 
       const messageFromBody =
