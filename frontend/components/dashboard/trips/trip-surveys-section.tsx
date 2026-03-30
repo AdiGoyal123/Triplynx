@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   CalendarRange,
   ClipboardList,
@@ -9,6 +10,7 @@ import {
   MessageSquareText,
   Plus,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { CreateSurveyModal, type CreateSurveyWhatsappSummary } from "./create-survey-modal";
 import type { Survey, SurveyOption } from "./types";
 import { useTripSurveys } from "./use-trip-surveys";
@@ -118,7 +120,13 @@ function formatStatusLabel(status: Survey["status"]): string {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
-function SurveyChoices({ options }: { options: SurveyOption[] }) {
+function SurveyChoices({
+  options,
+  highlightOptionId,
+}: {
+  options: SurveyOption[];
+  highlightOptionId?: string | null;
+}) {
   if (options.length === 0) {
     return (
       <div className="mt-4 rounded-lg border border-dashed border-border/80 bg-muted/20 px-4 py-3 text-center sm:text-left">
@@ -136,7 +144,12 @@ function SurveyChoices({ options }: { options: SurveyOption[] }) {
         {options.map((o, i) => (
           <li
             key={o.id}
-            className="flex gap-2.5 text-sm leading-snug text-foreground"
+            id={`survey-option-${o.id}`}
+            className={cn(
+              "flex gap-2.5 text-sm leading-snug text-foreground scroll-mt-24",
+              highlightOptionId === o.id &&
+                "rounded-md bg-primary/10 py-1 ring-2 ring-primary/60 ring-offset-2 ring-offset-background",
+            )}
           >
             <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-background text-[10px] font-semibold text-muted-foreground ring-1 ring-border/80">
               {i + 1}
@@ -166,9 +179,30 @@ function statusBadgeClass(status: Survey["status"]) {
 }
 
 export function TripSurveysSection({ tripId }: TripSurveysSectionProps) {
+  const searchParams = useSearchParams();
+  const qsSurvey = searchParams.get("survey");
+  const qsOption = searchParams.get("option");
+
   const { surveys, loading, error: loadError, refresh } = useTripSurveys(tripId);
   const [createOpen, setCreateOpen] = useState(false);
   const [whatsappBanner, setWhatsappBanner] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (loading || !qsSurvey) {
+      return;
+    }
+    const t = window.setTimeout(() => {
+      const surveyEl = document.getElementById(`survey-${qsSurvey}`);
+      surveyEl?.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (qsOption) {
+        document.getElementById(`survey-option-${qsOption}`)?.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+        });
+      }
+    }, 150);
+    return () => clearTimeout(t);
+  }, [loading, qsSurvey, qsOption, surveys]);
 
   const onSurveyCreated = useCallback(
     (_survey: Survey, meta?: { whatsapp_notifications?: CreateSurveyWhatsappSummary }) => {
@@ -267,7 +301,8 @@ export function TripSurveysSection({ tripId }: TripSurveysSectionProps) {
                 return (
                   <li
                     key={s.id}
-                    className="group rounded-xl border border-border/70 bg-card/30 p-4 shadow-sm transition hover:border-border hover:shadow-md sm:p-5"
+                    id={`survey-${s.id}`}
+                    className="group scroll-mt-24 rounded-xl border border-border/70 bg-card/30 p-4 shadow-sm transition hover:border-border hover:shadow-md sm:p-5"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
@@ -312,7 +347,10 @@ export function TripSurveysSection({ tripId }: TripSurveysSectionProps) {
                       ) : null}
                     </div>
 
-                    <SurveyChoices options={s.options} />
+                    <SurveyChoices
+                      options={s.options}
+                      highlightOptionId={qsSurvey === s.id ? qsOption : null}
+                    />
                   </li>
                 );
               })}

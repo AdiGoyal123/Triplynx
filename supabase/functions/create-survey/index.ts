@@ -11,6 +11,11 @@ const OPEN_TIME_SLACK_MS = 60_000
 const HOURS_DEFAULT_WINDOW = 24
 const SURVEY_OPTIONS_MAX = 10
 
+/** WhatsApp caps interactive quick-reply buttons at 3 for in-session sends (Twilio twilio/quick-reply). */
+const WHATSAPP_QUICK_REPLY_MAX_BUTTONS = 3
+/** Label on each quick-reply button (WhatsApp / Twilio). */
+const WHATSAPP_QUICK_REPLY_TITLE_MAX = 20
+
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
@@ -88,6 +93,167 @@ function linesFromSurveyOptionRows(rows: Array<Record<string, unknown>>): string
 const WHATSAPP_BODY_MAX_CHARS = 3500
 const WHATSAPP_OPTIONS_MAX_LINES = SURVEY_OPTIONS_MAX
 
+function optionDisplayTitle(row: Record<string, unknown>): string {
+  const label = row.label != null ? String(row.label).trim() : ""
+  const value = row.value != null ? String(row.value).trim() : ""
+  if (label && value && label !== value) return `${label} (${value})`
+  return label || value
+}
+
+function truncateQuickReplyTitle(text: string): string {
+  const t = text.trim()
+  if (t.length <= WHATSAPP_QUICK_REPLY_TITLE_MAX) return t
+  return t.slice(0, WHATSAPP_QUICK_REPLY_TITLE_MAX - 1) + "…"
+}
+
+function buildQuickReplyActionsFromOptions(
+  rows: Array<Record<string, unknown>>,
+  surveyId: string,
+): Array<{ title: string; id: string }> | null {
+  if (rows.length === 0 || rows.length > WHATSAPP_QUICK_REPLY_MAX_BUTTONS) return null
+  const actions: Array<{ title: string; id: string }> = []
+  for (const row of rows) {
+    const optionId = row.id != null ? String(row.id) : ""
+    const title = optionDisplayTitle(row)
+    if (!optionId || !title) return null
+    const id = `triplynx:${surveyId}:${optionId}`.slice(0, 200)
+    actions.push({ title: truncateQuickReplyTitle(title), id })
+  }
+  return actions
+}
+
+function buildSurveyQuickReplyMessageBody(opts: {
+  tripPart: string
+  surveyTitle: string
+  by: string
+  closes: string
+}): string {
+  const text = [
+    `New survey on Triplynx for ${opts.tripPart}: "${opts.surveyTitle.trim()}"`,
+    `Shared by ${opts.by}. Please respond by ${opts.closes}.`,
+    "Choose an option below.",
+  ].join("\n\n")
+  return text.slice(0, 1024)
+}
+
+async function createWhatsappQuickReplyContent(opts: {
+  accountSid: string
+  authToken: string
+  body: string
+  actions: Array<{ title: string; id: string }>
+}): Promise<{ ok: true; sid: string } | { ok: false; error: string }> {
+  const friendly_name = `triplynx_qr_${crypto.randomUUID()}`
+  const bodyText = opts.body.slice(0, 1024)
+  const auth = btoa(`${opts.accountSid}:${opts.authToken}`)
+  const res = await fetch("https://content.twilio.com/v1/Content", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Basic ${auth}`,
+    },
+    body: JSON.stringify({
+      friendly_name,
+      language: "en",
+      types: {
+        "twilio/quick-reply": {
+          body: bodyText,
+          actions: opts.actions.map((a) => ({ title: a.title, id: a.id })),
+        },
+        "twilio/text": {
+          body: bodyText.slice(0, 1600),
+        },
+      },
+    }),
+  })
+  if (!res.ok) {
+    const errText = await res.text()
+    return { ok: false, error: errText || `${res.status} ${res.statusText}` }
+  }
+  const data = (await res.json()) as { sid?: string }
+  if (!data.sid) return { ok: false, error: "Twilio Content create response missing sid." }
+  return { ok: true, sid: data.sid }
+}
+
+async function deleteWhatsappContent(
+  accountSid: string,
+  authToken: string,
+  contentSid: string,
+): Promise<void> {
+  const auth = btoa(`${accountSid}:${authToken}`)
+  try {
+    await fetch(`https://content.twilio.com/v1/Content/${encodeURIComponent(contentSid)}`, {
+      method: "DELETE",
+      headers: { Authorization: `Basic ${auth}` },
+    })
+  } catch {
+    /* best-effort cleanup */
+  }
+}
+
+async function twilioSendWhatsappWithContentSid(opts: {
+  accountSid: string
+  authToken: string
+  from: string
+  to: string
+  contentSid: string
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${opts.accountSid}/Messages.json`
+  const credentials = btoa(`${opts.accountSid}:${opts.authToken}`)
+  const params = new URLSearchParams({
+    To: opts.to,
+    From: opts.from,
+    ContentSid: opts.contentSid,
+  })
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: params.toString(),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    return { ok: false, error: text || `${res.status} ${res.statusText}` }
+  }
+  return { ok: true }
+}
+
+async function twilioSendWhatsappWithBody(opts: {
+  accountSid: string
+  authToken: string
+  from: string
+  to: string
+  body: string
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${opts.accountSid}/Messages.json`
+  const credentials = btoa(`${opts.accountSid}:${opts.authToken}`)
+  const params = new URLSearchParams({ To: opts.to, From: opts.from, Body: opts.body })
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: params.toString(),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    return { ok: false, error: text || `${res.status} ${res.statusText}` }
+  }
+  return { ok: true }
+}
+
+/**
+ * WhatsApp turns full https URLs into tappable links (fallback when option count > 3 or quick-reply send fails).
+ */
+function surveyOptionVoteUrl(baseNoSlash: string, tripId: string, surveyId: string, optionId: string): string {
+  const u = new URL(`${baseNoSlash}/dashboard/trips/${encodeURIComponent(tripId)}`)
+  u.searchParams.set("survey", surveyId)
+  u.searchParams.set("option", optionId)
+  return u.toString()
+}
+
 function buildWhatsappSurveyBody(opts: {
   tripPart: string
   surveyTitle: string
@@ -121,6 +287,51 @@ function buildWhatsappSurveyBody(opts: {
   return body
 }
 
+/** One tappable URL per choice (WhatsApp link preview / open in browser → Triplynx trip page). */
+function buildWhatsappSurveyBodyWithVoteLinks(opts: {
+  tripPart: string
+  surveyTitle: string
+  by: string
+  closes: string
+  baseNoSlash: string
+  tripId: string
+  surveyId: string
+  optionsRows: Array<Record<string, unknown>>
+}): string | null {
+  const headerBlocks = [
+    `New survey on Triplynx for ${opts.tripPart}: "${opts.surveyTitle.trim()}"`,
+    `Shared by ${opts.by}. Please respond by ${opts.closes}.`,
+  ]
+
+  const rows = opts.optionsRows.slice(0, WHATSAPP_OPTIONS_MAX_LINES)
+  const linkBlocks: string[] = []
+  for (const row of rows) {
+    const id = row.id != null ? String(row.id) : ""
+    if (!id) continue
+    const label = row.label != null ? String(row.label).trim() : ""
+    const value = row.value != null ? String(row.value).trim() : ""
+    const title = label && value && label !== value ? `${label} (${value})` : label || value
+    if (!title) continue
+    const url = surveyOptionVoteUrl(opts.baseNoSlash, opts.tripId, opts.surveyId, id)
+    linkBlocks.push(`• ${title}\n${url}`)
+  }
+
+  if (linkBlocks.length === 0) {
+    return null
+  }
+
+  const optionBlock = ["Tap a link to open this choice in Triplynx:", ...linkBlocks].join("\n\n")
+  const tripLine = `Full trip: ${opts.baseNoSlash}/dashboard/trips/${encodeURIComponent(opts.tripId)}`
+
+  const parts = [...headerBlocks, optionBlock, tripLine]
+
+  let body = parts.join("\n\n")
+  if (body.length > WHATSAPP_BODY_MAX_CHARS) {
+    body = body.slice(0, WHATSAPP_BODY_MAX_CHARS - 1).trimEnd() + "…"
+  }
+  return body
+}
+
 async function sendWhatsappSurveyNotice(opts: {
   accountSid: string
   authToken: string
@@ -131,8 +342,12 @@ async function sendWhatsappSurveyNotice(opts: {
   closesAtIso: string
   organizerLabel: string
   tripId: string
+  surveyId: string
   appPublicUrl: string | null
   optionLines: string[]
+  optionsRows: Array<Record<string, unknown>>
+  /** Twilio Content SID (twilio/quick-reply). Tried first; falls back to plain Body if send fails. */
+  whatsappQuickReplyContentSid?: string | null
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const from = whatsappAddress(
     opts.fromRaw.startsWith("whatsapp:") ? opts.fromRaw : normalizeToE164(opts.fromRaw) ?? opts.fromRaw,
@@ -147,33 +362,51 @@ async function sendWhatsappSurveyNotice(opts: {
     ? `Open Triplynx to vote: ${base}/dashboard/trips/${opts.tripId}`
     : "Open the Triplynx app to view this trip and respond to the survey."
 
-  const body = buildWhatsappSurveyBody({
-    tripPart,
-    surveyTitle: opts.surveyTitle,
-    by,
-    closes,
-    linkLine,
-    optionLines: opts.optionLines,
-  })
+  const voteLinkBody =
+    base && opts.optionsRows.length > 0
+      ? buildWhatsappSurveyBodyWithVoteLinks({
+          tripPart,
+          surveyTitle: opts.surveyTitle,
+          by,
+          closes,
+          baseNoSlash: base,
+          tripId: opts.tripId,
+          surveyId: opts.surveyId,
+          optionsRows: opts.optionsRows,
+        })
+      : null
 
-  const url = `https://api.twilio.com/2010-04-01/Accounts/${opts.accountSid}/Messages.json`
-  const credentials = btoa(`${opts.accountSid}:${opts.authToken}`)
-  const params = new URLSearchParams({ To: to, From: from, Body: body })
+  const body =
+    voteLinkBody ??
+    buildWhatsappSurveyBody({
+      tripPart,
+      surveyTitle: opts.surveyTitle,
+      by,
+      closes,
+      linkLine,
+      optionLines: opts.optionLines,
+    })
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${credentials}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: params.toString(),
-  })
-
-  if (!res.ok) {
-    const text = await res.text()
-    return { ok: false, error: text || `${res.status} ${res.statusText}` }
+  const contentSid = opts.whatsappQuickReplyContentSid?.trim() || null
+  if (contentSid) {
+    const qr = await twilioSendWhatsappWithContentSid({
+      accountSid: opts.accountSid,
+      authToken: opts.authToken,
+      from,
+      to,
+      contentSid,
+    })
+    if (qr.ok) return { ok: true }
+    /* e.g. template/session not supported — fall back to text or links */
   }
-  return { ok: true }
+
+  return twilioSendWhatsappWithBody({
+    accountSid: opts.accountSid,
+    authToken: opts.authToken,
+    from,
+    to,
+    body,
+  })
 }
 
 Deno.serve(async (req) => {
@@ -440,40 +673,78 @@ Deno.serve(async (req) => {
       const organizerLabel = labelForUser(user)
       const optionLines = linesFromSurveyOptionRows(optionsRows)
 
-      const seenE164 = new Set<string>()
-      for (const row of memberRows) {
-        const rawPhone = row.phone != null ? String(row.phone) : ""
-        if (!rawPhone.trim()) continue
-        const toE164 = normalizeToE164(rawPhone)
-        if (!toE164 || seenE164.has(toE164)) continue
-        seenE164.add(toE164)
-
-        if (!accountSid || !authToken || !fromRaw) {
-          whatsappToMembers.push({
-            phone: toE164,
-            sent: false,
-            error: "Missing TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, or TWILIO_WHATSAPP_FROM.",
-          })
-          continue
+      let whatsappQuickReplyContentSid: string | null = null
+      try {
+        if (
+          accountSid &&
+          authToken &&
+          optionsRows.length > 0 &&
+          optionsRows.length <= WHATSAPP_QUICK_REPLY_MAX_BUTTONS
+        ) {
+          const actions = buildQuickReplyActionsFromOptions(optionsRows, surveyId)
+          if (actions) {
+            const tripTitleForQr = trip?.title?.trim() ?? ""
+            const tripPartForQr = tripTitleForQr ? `"${tripTitleForQr}"` : "your trip"
+            const qrBody = buildSurveyQuickReplyMessageBody({
+              tripPart: tripPartForQr,
+              surveyTitle: title,
+              by: organizerLabel.trim() || "Someone",
+              closes: formatClosesForMessage(closesAtIso),
+            })
+            const created = await createWhatsappQuickReplyContent({
+              accountSid,
+              authToken,
+              body: qrBody,
+              actions,
+            })
+            if (created.ok) {
+              whatsappQuickReplyContentSid = created.sid
+            }
+          }
         }
 
-        const result = await sendWhatsappSurveyNotice({
-          accountSid,
-          authToken,
-          fromRaw,
-          toE164,
-          tripTitle: trip?.title ?? null,
-          surveyTitle: title,
-          closesAtIso: closesAtIso,
-          organizerLabel,
-          tripId,
-          appPublicUrl,
-          optionLines,
-        })
+        const seenE164 = new Set<string>()
+        for (const row of memberRows) {
+          const rawPhone = row.phone != null ? String(row.phone) : ""
+          if (!rawPhone.trim()) continue
+          const toE164 = normalizeToE164(rawPhone)
+          if (!toE164 || seenE164.has(toE164)) continue
+          seenE164.add(toE164)
 
-        whatsappToMembers.push(
-          result.ok ? { phone: toE164, sent: true } : { phone: toE164, sent: false, error: result.error },
-        )
+          if (!accountSid || !authToken || !fromRaw) {
+            whatsappToMembers.push({
+              phone: toE164,
+              sent: false,
+              error: "Missing TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, or TWILIO_WHATSAPP_FROM.",
+            })
+            continue
+          }
+
+          const result = await sendWhatsappSurveyNotice({
+            accountSid,
+            authToken,
+            fromRaw,
+            toE164,
+            tripTitle: trip?.title ?? null,
+            surveyTitle: title,
+            closesAtIso: closesAtIso,
+            organizerLabel,
+            tripId,
+            surveyId,
+            appPublicUrl,
+            optionLines,
+            optionsRows,
+            whatsappQuickReplyContentSid,
+          })
+
+          whatsappToMembers.push(
+            result.ok ? { phone: toE164, sent: true } : { phone: toE164, sent: false, error: result.error },
+          )
+        }
+      } finally {
+        if (whatsappQuickReplyContentSid && accountSid && authToken) {
+          await deleteWhatsappContent(accountSid, authToken, whatsappQuickReplyContentSid)
+        }
       }
     }
 

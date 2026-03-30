@@ -497,7 +497,8 @@ export function CreateSurveyModal({ tripId, open, onClose, onCreated }: CreateSu
               <div>
                 <p className="text-sm font-medium text-foreground">Options (optional)</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Up to {MAX_SURVEY_OPTIONS} choices. Empty rows are ignored.
+                  Up to {MAX_SURVEY_OPTIONS} choices. Empty rows are ignored. WhatsApp shows
+                  tap-buttons for up to 3 choices; more are sent as links.
                 </p>
               </div>
               <button
